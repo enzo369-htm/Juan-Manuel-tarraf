@@ -76,6 +76,11 @@ html.page-scroll #root {
   left: 0;
   z-index: 1;
   will-change: transform;
+  background-color: var(--paper);
+  background-image: url('/works/img fondo hero.jpg');
+  background-size: 100% 100%;
+  background-position: 0 0;
+  background-repeat: no-repeat;
 }
 
 .work-piece {
