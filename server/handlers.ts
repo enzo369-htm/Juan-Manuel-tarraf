@@ -114,12 +114,12 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         return
       }
       const db = sql()
-      await db`update hero_gates set x = 1605, y = 1110, width = 340, updated_at = now() where section_slug = 'trabajos'`
-      await db`update hero_gates set x = 1935, y = 1020, width = 280, updated_at = now() where section_slug = 'bio'`
-      await db`update hero_gates set x = 1320, y = 1560, width = 360, updated_at = now() where section_slug = 'textos'`
-      await db`update hero_gates set x = 2385, y = 315, width = 300, updated_at = now() where section_slug = 'exposiciones'`
-      await db`update hero_gates set x = 390, y = 2010, width = 270, updated_at = now() where section_slug = 'archivos'`
-      await db`update hero_gates set x = 3210, y = 2145, width = 250, updated_at = now() where section_slug = 'contacto'`
+      await db`update hero_gates set x = 1204, y = 833, width = 340, updated_at = now() where section_slug = 'trabajos'`
+      await db`update hero_gates set x = 1451, y = 765, width = 280, updated_at = now() where section_slug = 'bio'`
+      await db`update hero_gates set x = 990, y = 1170, width = 360, updated_at = now() where section_slug = 'textos'`
+      await db`update hero_gates set x = 1789, y = 236, width = 300, updated_at = now() where section_slug = 'exposiciones'`
+      await db`update hero_gates set x = 293, y = 1508, width = 270, updated_at = now() where section_slug = 'archivos'`
+      await db`update hero_gates set x = 2408, y = 1609, width = 250, updated_at = now() where section_slug = 'contacto'`
       const rows = (await db`
         select g.section_slug as slug, g.x, g.y, g.width, m.url, g.updated_at
         from hero_gates g
