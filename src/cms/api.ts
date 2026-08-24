@@ -99,13 +99,19 @@ export async function apiUploadMedia(file: File, section?: string) {
     },
     body: payload,
   })
-  const data = (await res.json()) as {
+  const raw = await res.text()
+  let data: {
     id?: string
     url?: string
     placementId?: string
     error?: string
     warning?: string
+  } = {}
+  try {
+    data = raw ? (JSON.parse(raw) as typeof data) : {}
+  } catch {
+    throw new Error(raw.slice(0, 180) || `Error ${res.status}`)
   }
-  if (!res.ok) throw new Error(data.error || 'No se pudo subir')
+  if (!res.ok) throw new Error(data.error || `Error ${res.status}`)
   return data
 }
