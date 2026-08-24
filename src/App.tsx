@@ -3,6 +3,8 @@ import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { AdminPage } from './cms/AdminPage'
 import { HeroCanvas } from './components/HeroCanvas'
 import { SectionPage } from './components/SectionPage'
+import { TextArticle } from './components/TextArticle'
+import { TextsIndex } from './components/TextsIndex'
 
 function PageScrollMode() {
   const { pathname } = useLocation()
@@ -21,6 +23,8 @@ export default function App() {
       <Routes>
         <Route path="/" element={<HeroCanvas />} />
         <Route path="/admin/*" element={<AdminPage />} />
+        <Route path="/textos/:textId" element={<TextArticle />} />
+        <Route path="/textos" element={<TextsIndex />} />
         <Route path="/:sectionId" element={<SectionPage />} />
       </Routes>
     </BrowserRouter>

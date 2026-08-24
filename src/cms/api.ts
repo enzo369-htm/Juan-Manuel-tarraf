@@ -68,6 +68,43 @@ export async function apiSaveCopy(slug: string, body: string) {
   })
 }
 
+export type TextEntry = {
+  id: string
+  title: string
+  description: string
+  body?: string
+  created_at: string
+}
+
+export async function apiListTexts() {
+  return request<{ texts: TextEntry[] }>('/api/texts')
+}
+
+export async function apiGetText(id: string) {
+  return request<{ text: TextEntry }>(`/api/texts/${id}`)
+}
+
+export async function apiCreateText(payload: { title: string; description: string; body: string }) {
+  return request<{ text: TextEntry }>('/api/texts', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function apiSaveText(
+  id: string,
+  payload: { title: string; description: string; body: string },
+) {
+  return request<{ text: TextEntry }>(`/api/texts/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function apiDeleteText(id: string) {
+  return request<{ ok: boolean }>(`/api/texts/${id}`, { method: 'DELETE' })
+}
+
 export type CanvasPiece = {
   id: string
   src: string

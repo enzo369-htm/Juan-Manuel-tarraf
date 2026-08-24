@@ -30,7 +30,12 @@ if (!url) {
 }
 
 const sql = neon(url)
-const files = ['schema.sql', '003_free_canvas_percent.sql', '004_section_canvases.sql']
+const files = [
+  'schema.sql',
+  '003_free_canvas_percent.sql',
+  '004_section_canvases.sql',
+  '005_texts.sql',
+]
 
 for (const file of files) {
   const schema = readFileSync(new URL(`../db/${file}`, import.meta.url), 'utf8')

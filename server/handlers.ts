@@ -299,6 +299,89 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
       return
     }
 
+    if (path === '/api/texts' && method === 'GET') {
+      if (!hasDatabase()) {
+        sendJson(res, 200, { texts: [] })
+        return
+      }
+      const rows = await sql()`
+        select id, title, description, created_at from texts order by created_at desc
+      `
+      sendJson(res, 200, { texts: rows })
+      return
+    }
+
+    if (path === '/api/texts' && method === 'POST') {
+      if (!requireAuth(req, res)) return
+      if (!hasDatabase()) {
+        sendJson(res, 503, { error: 'DATABASE_URL no configurada' })
+        return
+      }
+      const payload = await readJson<{ title?: string; description?: string; body?: string }>(req)
+      const title = (payload.title ?? '').trim()
+      if (!title) {
+        sendJson(res, 400, { error: 'El título es obligatorio' })
+        return
+      }
+      const created = await sql()`
+        insert into texts (title, description, body)
+        values (${title}, ${payload.description ?? ''}, ${payload.body ?? ''})
+        returning id, title, description, body, created_at
+      `
+      sendJson(res, 200, { text: created[0] })
+      return
+    }
+
+    const textMatch = path.match(/^\/api\/texts\/([0-9a-f-]+)$/i)
+    if (textMatch && method === 'GET') {
+      if (!hasDatabase()) {
+        sendJson(res, 503, { error: 'DATABASE_URL no configurada' })
+        return
+      }
+      const rows = await sql()`
+        select id, title, description, body, created_at from texts where id = ${textMatch[1]}
+      `
+      if (!rows[0]) {
+        sendJson(res, 404, { error: 'No encontrado' })
+        return
+      }
+      sendJson(res, 200, { text: rows[0] })
+      return
+    }
+
+    if (textMatch && (method === 'PUT' || method === 'DELETE')) {
+      if (!requireAuth(req, res)) return
+      if (!hasDatabase()) {
+        sendJson(res, 503, { error: 'DATABASE_URL no configurada' })
+        return
+      }
+      if (method === 'DELETE') {
+        await sql()`delete from texts where id = ${textMatch[1]}`
+        sendJson(res, 200, { ok: true })
+        return
+      }
+      const payload = await readJson<{ title?: string; description?: string; body?: string }>(req)
+      const title = (payload.title ?? '').trim()
+      if (!title) {
+        sendJson(res, 400, { error: 'El título es obligatorio' })
+        return
+      }
+      const updated = await sql()`
+        update texts
+        set title = ${title},
+            description = ${payload.description ?? ''},
+            body = ${payload.body ?? ''}
+        where id = ${textMatch[1]}
+        returning id, title, description, body, created_at
+      `
+      if (!updated[0]) {
+        sendJson(res, 404, { error: 'No encontrado' })
+        return
+      }
+      sendJson(res, 200, { text: updated[0] })
+      return
+    }
+
     sendJson(res, 404, { error: 'Not found' })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error de servidor'
