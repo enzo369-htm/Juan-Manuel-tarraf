@@ -48,32 +48,79 @@ export default {
 
       const dbUrl = process.env.DATABASE_URL
       if (!dbUrl) {
-        if (request.method === 'GET') return Response.json({ slug, body: '' })
+        if (request.method === 'GET') return Response.json({ slug, body: '', portraitUrl: '' })
         return Response.json({ error: 'DATABASE_URL no configurada' }, { status: 503 })
       }
 
       const { neon } = await import('@neondatabase/serverless')
       const sql = neon(dbUrl)
 
+      const toCopy = (row?: { slug: string; body: string; portrait_url?: string | null }) => ({
+        slug: row?.slug ?? slug,
+        body: row?.body ?? '',
+        portraitUrl: row?.portrait_url ?? '',
+      })
+
       if (request.method === 'GET') {
-        const rows = (await sql`
-          select section_slug as slug, body from section_copy where section_slug = ${slug}
-        `) as { slug: string; body: string }[]
-        return Response.json(rows[0] ?? { slug, body: '' })
+        try {
+          const rows = (await sql`
+            select section_slug as slug, body, portrait_url
+            from section_copy
+            where section_slug = ${slug}
+          `) as { slug: string; body: string; portrait_url: string | null }[]
+          return Response.json(toCopy(rows[0]))
+        } catch {
+          const rows = (await sql`
+            select section_slug as slug, body from section_copy where section_slug = ${slug}
+          `) as { slug: string; body: string }[]
+          return Response.json({ slug, body: rows[0]?.body ?? '', portraitUrl: '' })
+        }
       }
 
       if (request.method === 'PUT') {
         if (!(await isAuthed(request))) {
           return Response.json({ error: 'No autorizado' }, { status: 401 })
         }
-        const body = (await request.json().catch(() => ({}))) as { body?: string }
-        const text = typeof body.body === 'string' ? body.body : ''
+        const payload = (await request.json().catch(() => ({}))) as {
+          body?: string
+          portraitUrl?: string
+        }
+        const text = typeof payload.body === 'string' ? payload.body : ''
+        const portraitUrl =
+          slug === 'bio' && typeof payload.portraitUrl === 'string' ? payload.portraitUrl : null
+
+        if (portraitUrl !== null) {
+          try {
+            await sql`
+              insert into section_copy (section_slug, body, portrait_url)
+              values (${slug}, ${text}, ${portraitUrl})
+              on conflict (section_slug) do update
+              set body = excluded.body, portrait_url = excluded.portrait_url
+            `
+            return Response.json({ slug, body: text, portraitUrl })
+          } catch {
+            return Response.json(
+              { error: 'Falta correr db/008_bio_portrait.sql en Neon' },
+              { status: 503 },
+            )
+          }
+        }
+
         await sql`
           insert into section_copy (section_slug, body)
           values (${slug}, ${text})
           on conflict (section_slug) do update set body = excluded.body
         `
-        return Response.json({ slug, body: text })
+        try {
+          const rows = (await sql`
+            select section_slug as slug, body, portrait_url
+            from section_copy
+            where section_slug = ${slug}
+          `) as { slug: string; body: string; portrait_url: string | null }[]
+          return Response.json(toCopy(rows[0] ?? { slug, body: text, portrait_url: '' }))
+        } catch {
+          return Response.json({ slug, body: text, portraitUrl: '' })
+        }
       }
 
       return Response.json({ error: 'Method not allowed' }, { status: 405 })

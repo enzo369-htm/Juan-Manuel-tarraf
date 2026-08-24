@@ -49,7 +49,8 @@ create table if not exists placements (
 
 create table if not exists section_copy (
   section_slug text primary key references sections (slug) on delete cascade,
-  body text not null default ''
+  body text not null default '',
+  portrait_url text
 );
 
 create table if not exists texts (

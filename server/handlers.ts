@@ -132,13 +132,27 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
     const copyMatch = path.match(/^\/api\/copy\/([a-z]+)$/)
     if (copyMatch && method === 'GET') {
       if (!hasDatabase()) {
-        sendJson(res, 200, { slug: copyMatch[1], body: '' })
+        sendJson(res, 200, { slug: copyMatch[1], body: '', portraitUrl: '' })
         return
       }
-      const rows = (await sql()`
-        select section_slug as slug, body from section_copy where section_slug = ${copyMatch[1]}
-      `) as { slug: string; body: string }[]
-      sendJson(res, 200, rows[0] ?? { slug: copyMatch[1], body: '' })
+      try {
+        const rows = (await sql()`
+          select section_slug as slug, body, portrait_url
+          from section_copy
+          where section_slug = ${copyMatch[1]}
+        `) as { slug: string; body: string; portrait_url: string | null }[]
+        const row = rows[0]
+        sendJson(res, 200, {
+          slug: row?.slug ?? copyMatch[1],
+          body: row?.body ?? '',
+          portraitUrl: row?.portrait_url ?? '',
+        })
+      } catch {
+        const rows = (await sql()`
+          select section_slug as slug, body from section_copy where section_slug = ${copyMatch[1]}
+        `) as { slug: string; body: string }[]
+        sendJson(res, 200, { slug: copyMatch[1], body: rows[0]?.body ?? '', portraitUrl: '' })
+      }
       return
     }
 
@@ -148,14 +162,27 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         sendJson(res, 503, { error: 'DATABASE_URL no configurada' })
         return
       }
-      const body = await readJson<{ body?: string }>(req)
+      const body = await readJson<{ body?: string; portraitUrl?: string }>(req)
+      const text = body.body ?? ''
       const db = sql()
+      const portraitUrl =
+        copyMatch[1] === 'bio' && typeof body.portraitUrl === 'string' ? body.portraitUrl : null
+      if (portraitUrl !== null) {
+        await db`
+          insert into section_copy (section_slug, body, portrait_url)
+          values (${copyMatch[1]}, ${text}, ${portraitUrl})
+          on conflict (section_slug) do update
+          set body = excluded.body, portrait_url = excluded.portrait_url
+        `
+        sendJson(res, 200, { slug: copyMatch[1], body: text, portraitUrl })
+        return
+      }
       await db`
         insert into section_copy (section_slug, body)
-        values (${copyMatch[1]}, ${body.body ?? ''})
+        values (${copyMatch[1]}, ${text})
         on conflict (section_slug) do update set body = excluded.body
       `
-      sendJson(res, 200, { slug: copyMatch[1], body: body.body ?? '' })
+      sendJson(res, 200, { slug: copyMatch[1], body: text, portraitUrl: '' })
       return
     }
 
