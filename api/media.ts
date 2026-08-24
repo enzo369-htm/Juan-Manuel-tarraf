@@ -1,8 +1,7 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { handleApi } from '../server/handlers'
+import { handleWeb } from './bridge'
 
-export const config = { api: { bodyParser: false } }
-
-export default function handler(req: VercelRequest, res: VercelResponse) {
-  void handleApi(req, res)
+export default {
+  fetch(request: Request) {
+    return handleWeb(request)
+  },
 }
