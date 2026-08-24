@@ -270,7 +270,8 @@
 .admin-app {
   display: grid;
   grid-template-columns: 13.5rem minmax(0, 1fr);
-  min-height: 100dvh;
+  height: 100dvh;
+  overflow: hidden;
   background: var(--paper);
 }
 
@@ -339,6 +340,10 @@
 
 .admin-app__main {
   min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .admin-app__main .admin-shell {
@@ -351,6 +356,15 @@
   flex-direction: column;
   gap: 1rem;
   padding: 1.15rem 1.35rem 1.4rem;
+}
+
+.admin-panel--canvas {
+  height: auto;
+  min-height: 100%;
+}
+
+.admin-panel--canvas .studio-canvas {
+  flex: 0 0 auto;
 }
 
 .admin-panel__head {
@@ -417,6 +431,7 @@
 @media (max-width: 900px) {
   .admin-app {
     grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .admin-nav {

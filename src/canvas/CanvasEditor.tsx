@@ -123,7 +123,10 @@ export function CanvasEditor({
         </div>
       )}
 
-      <p className="studio-canvas__hint">Arrastrá para mover. Esquina inferior derecha: tamaño.</p>
+      <p className="studio-canvas__hint">
+        El alto agranda el lienzo para scrollear hacia abajo. Arrastrá para mover. Esquina
+        inferior derecha: tamaño.
+      </p>
 
       <div
         ref={canvasRef}

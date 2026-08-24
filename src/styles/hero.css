@@ -27,6 +27,14 @@ body,
   -webkit-font-smoothing: antialiased;
 }
 
+html.page-scroll,
+html.page-scroll body,
+html.page-scroll #root {
+  height: auto;
+  min-height: 100%;
+  overflow: auto;
+}
+
 .hero {
   position: relative;
   width: 100%;
