@@ -297,9 +297,10 @@ html.page-scroll #root {
 }
 
 .series-intro {
-  width: min(38rem, calc(100% - 3rem));
-  margin: 0 auto;
-  padding: 3.2rem 0 1.6rem;
+  width: min(38rem, 100%);
+  margin: 0 auto 0 0;
+  padding: 3.2rem 1.5rem 1.6rem;
+  text-align: left;
 }
 
 .series-intro + .series-intro {
