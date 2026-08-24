@@ -76,11 +76,6 @@ html.page-scroll #root {
   left: 0;
   z-index: 1;
   will-change: transform;
-  background-color: var(--paper);
-  background-image: url('/hero-bg.jpg');
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
 }
 
 .work-piece {
