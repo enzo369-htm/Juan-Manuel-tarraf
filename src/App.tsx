@@ -7,7 +7,7 @@ import { SectionPage } from './components/SectionPage'
 function PageScrollMode() {
   const { pathname } = useLocation()
   useLayoutEffect(() => {
-    const allowScroll = pathname !== '/'
+    const allowScroll = pathname !== '/' && !pathname.startsWith('/admin')
     document.documentElement.classList.toggle('page-scroll', allowScroll)
     return () => document.documentElement.classList.remove('page-scroll')
   }, [pathname])

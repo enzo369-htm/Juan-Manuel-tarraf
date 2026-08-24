@@ -27,12 +27,18 @@ body,
   -webkit-font-smoothing: antialiased;
 }
 
-html.page-scroll,
+html.page-scroll {
+  height: auto;
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: scroll;
+}
+
 html.page-scroll body,
 html.page-scroll #root {
   height: auto;
   min-height: 100%;
-  overflow: auto;
+  overflow: visible;
 }
 
 .hero {

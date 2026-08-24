@@ -99,12 +99,14 @@ export function AdminSectionCanvas({ slug }: Props) {
           </label>
         </div>
       </header>
-      <FreeCanvas
-        pieces={pieces}
-        onChange={onChange}
-        heightRatio={heightRatio}
-        onHeightRatioChange={onHeightRatioChange}
-      />
+      <div className="admin-canvas-scroll">
+        <FreeCanvas
+          pieces={pieces}
+          onChange={onChange}
+          heightRatio={heightRatio}
+          onHeightRatioChange={onHeightRatioChange}
+        />
+      </div>
     </section>
   )
 }
