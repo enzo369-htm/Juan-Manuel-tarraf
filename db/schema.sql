@@ -32,6 +32,9 @@ create table if not exists section_canvases (
   section_slug text not null references sections (slug) on delete cascade,
   sort_order int not null default 0,
   height_ratio double precision not null default 1.2,
+  kind text not null default 'canvas',
+  title text not null default '',
+  description text not null default '',
   unique (section_slug, sort_order)
 );
 
@@ -93,9 +96,3 @@ insert into section_copy (section_slug, body) values
   ('textos', ''),
   ('contacto', '')
 on conflict (section_slug) do nothing;
-
-insert into section_canvases (section_slug, sort_order, height_ratio)
-select slug, 0, coalesce(height_ratio, 1.2)
-from sections
-where kind = 'canvas'
-on conflict (section_slug, sort_order) do nothing;

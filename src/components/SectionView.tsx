@@ -60,7 +60,6 @@ export function SectionView({ section }: Props) {
     }
   }, [section.id])
 
-  const visible = canvases.filter((canvas) => canvas.pieces.length > 0)
   const isBio = section.id === 'bio'
 
   return (
@@ -84,21 +83,49 @@ export function SectionView({ section }: Props) {
         </div>
       ) : (
         <div className="section-view__body">
-          {body && <div className="section-view__copy">{body}</div>}
-          {visible.map((canvas) => (
-            <CanvasViewer
-              key={canvas.id}
-              heightRatio={canvas.heightRatio}
-              items={canvas.pieces.map((piece) => ({
-                id: piece.id,
-                imageUrl: piece.src,
-                x: piece.x,
-                y: piece.y,
-                width: piece.width,
-              }))}
-            />
-          ))}
-          {!body && visible.length === 0 && (
+          {CANVAS_SECTIONS.has(section.id)
+            ? canvases.map((block) => {
+                if (block.kind === 'text') {
+                  if (!block.title && !block.description) return null
+                  return (
+                    <div key={block.id} className="series-intro">
+                      {block.title ? <h2 className="series-intro__title">{block.title}</h2> : null}
+                      {block.description ? (
+                        <p className="series-intro__text">{block.description}</p>
+                      ) : null}
+                    </div>
+                  )
+                }
+                if (block.pieces.length === 0) return null
+                return (
+                  <CanvasViewer
+                    key={block.id}
+                    heightRatio={block.heightRatio}
+                    items={block.pieces.map((piece) => ({
+                      id: piece.id,
+                      imageUrl: piece.src,
+                      x: piece.x,
+                      y: piece.y,
+                      width: piece.width,
+                    }))}
+                  />
+                )
+              })
+            : null}
+          {!CANVAS_SECTIONS.has(section.id) && body && (
+            <div className="section-view__copy">{body}</div>
+          )}
+          {CANVAS_SECTIONS.has(section.id) &&
+            !canvases.some(
+              (block) =>
+                (block.kind === 'text' && (block.title || block.description)) ||
+                (block.kind !== 'text' && block.pieces.length > 0),
+            ) && (
+              <p className="section-view__note">
+                Espacio de {section.label.toLowerCase()}. El contenido se carga desde el CMS.
+              </p>
+            )}
+          {!CANVAS_SECTIONS.has(section.id) && !body && (
             <p className="section-view__note">
               Espacio de {section.label.toLowerCase()}. El contenido se carga desde el CMS.
             </p>

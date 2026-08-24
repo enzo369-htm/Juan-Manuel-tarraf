@@ -11,12 +11,6 @@ create table if not exists section_canvases (
 alter table placements
   add column if not exists canvas_id uuid references section_canvases (id) on delete cascade;
 
-insert into section_canvases (section_slug, sort_order, height_ratio)
-select slug, 0, coalesce(height_ratio, 1.2)
-from sections
-where kind = 'canvas'
-on conflict (section_slug, sort_order) do nothing;
-
 update placements p
 set canvas_id = c.id
 from section_canvases c

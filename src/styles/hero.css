@@ -296,6 +296,33 @@ html.page-scroll #root {
   line-height: 1.65;
 }
 
+.series-intro {
+  width: min(38rem, calc(100% - 3rem));
+  margin: 0 auto;
+  padding: 3.2rem 0 1.6rem;
+}
+
+.series-intro + .series-intro {
+  padding-top: 1.2rem;
+}
+
+.series-intro__title {
+  margin: 0 0 0.55rem;
+  font-family: var(--font-display);
+  font-size: clamp(1.55rem, 3vw, 2rem);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.series-intro__text {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 0.98rem;
+  line-height: 1.65;
+  color: var(--mute);
+}
+
 .bio {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

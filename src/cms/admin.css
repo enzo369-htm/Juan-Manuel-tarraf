@@ -396,6 +396,48 @@
   gap: 0.8rem;
 }
 
+.admin-canvas-empty {
+  margin: 3rem auto 0;
+  max-width: 22rem;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-style: italic;
+  color: var(--mute);
+  line-height: 1.45;
+}
+
+.admin-series-text {
+  max-width: 40rem;
+}
+
+.admin-series-text__title,
+.admin-series-text__body {
+  width: 100%;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+}
+
+.admin-series-text__title {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+}
+
+.admin-series-text__body {
+  min-height: 6.5rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.admin-series-text__title:focus,
+.admin-series-text__body:focus {
+  outline: 1px solid var(--ink);
+  outline-offset: 2px;
+}
+
 .admin-panel__head {
   display: flex;
   align-items: flex-end;

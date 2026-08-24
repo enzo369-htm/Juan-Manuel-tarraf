@@ -189,19 +189,33 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
     const placeMatch = path.match(/^\/api\/placements\/([a-z]+)$/)
     if (placeMatch && method === 'GET') {
       if (!hasDatabase()) {
-        sendJson(res, 200, { canvases: [{ id: 'legacy', heightRatio: 1.2, pieces: [] }], pieces: [], heightRatio: 1.2 })
+        sendJson(res, 200, { canvases: [], pieces: [], heightRatio: 1.2 })
         return
       }
       const db = sql()
-      let canvasRows: { id: string; height_ratio: number }[] = []
+      let canvasRows: {
+        id: string
+        height_ratio: number
+        kind?: string | null
+        title?: string | null
+        description?: string | null
+      }[] = []
       try {
         canvasRows = (await db`
-          select id, height_ratio from section_canvases
+          select id, height_ratio, kind, title, description from section_canvases
           where section_slug = ${placeMatch[1]}
           order by sort_order
-        `) as { id: string; height_ratio: number }[]
+        `) as typeof canvasRows
       } catch {
-        canvasRows = []
+        try {
+          canvasRows = (await db`
+            select id, height_ratio from section_canvases
+            where section_slug = ${placeMatch[1]}
+            order by sort_order
+          `) as typeof canvasRows
+        } catch {
+          canvasRows = []
+        }
       }
       const rows = (await db`
         select p.id, p.canvas_id, p.media_id, p.x, p.y, p.width, p.z_index, m.url
@@ -219,18 +233,105 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         width: row.width > 100 ? 24 : row.width,
         z: row.z_index,
       })
-      const canvases = canvasRows.length
-        ? canvasRows.map((canvas, index) => ({
-            id: canvas.id,
-            heightRatio: canvas.height_ratio ?? 1.2,
-            pieces: rows.filter((row) => row.canvas_id === canvas.id || (index === 0 && !row.canvas_id)).map(toPiece),
-          }))
-        : [{ id: 'legacy', heightRatio: 1.2, pieces: rows.map(toPiece) }]
+      const canvases = canvasRows.map((canvas, index) => {
+        const kind = canvas.kind === 'text' ? 'text' : 'canvas'
+        return {
+          id: canvas.id,
+          kind,
+          title: canvas.title ?? '',
+          description: canvas.description ?? '',
+          heightRatio: canvas.height_ratio ?? 1.2,
+          pieces:
+            kind === 'text'
+              ? []
+              : rows
+                  .filter((row) => row.canvas_id === canvas.id || (index === 0 && !row.canvas_id))
+                  .map(toPiece),
+        }
+      })
       sendJson(res, 200, {
         canvases,
-        pieces: canvases[0]?.pieces ?? [],
-        heightRatio: canvases[0]?.heightRatio ?? 1.2,
+        pieces: canvases.find((block) => block.kind === 'canvas')?.pieces ?? [],
+        heightRatio: canvases.find((block) => block.kind === 'canvas')?.heightRatio ?? 1.2,
       })
+      return
+    }
+
+    if (placeMatch && method === 'POST') {
+      if (!requireAuth(req, res)) return
+      if (!hasDatabase()) {
+        sendJson(res, 503, { error: 'DATABASE_URL no configurada' })
+        return
+      }
+      const payload = await readJson<{ kind?: string }>(req)
+      const kind = payload.kind === 'text' ? 'text' : 'canvas'
+      const db = sql()
+      let existing: { id: string; kind?: string | null }[] = []
+      try {
+        existing = (await db`
+          select id, kind from section_canvases where section_slug = ${placeMatch[1]}
+        `) as typeof existing
+      } catch {
+        existing = (await db`
+          select id from section_canvases where section_slug = ${placeMatch[1]}
+        `) as typeof existing
+      }
+      const ofKind = existing.filter((row) => (row.kind || 'canvas') === kind)
+      if (ofKind.length >= 4) {
+        sendJson(res, 400, {
+          error: kind === 'text' ? 'Máximo 4 textos por sección' : 'Máximo 4 lienzos por sección',
+        })
+        return
+      }
+      try {
+        const created = (await db`
+          insert into section_canvases (section_slug, sort_order, height_ratio, kind, title, description)
+          values (${placeMatch[1]}, ${existing.length}, 1.2, ${kind}, '', '')
+          returning id, height_ratio, kind, title, description
+        `) as { id: string; height_ratio: number; kind: string; title: string; description: string }[]
+        const row = created[0]
+        sendJson(res, 200, {
+          canvas: {
+            id: row.id,
+            kind: row.kind === 'text' ? 'text' : 'canvas',
+            title: row.title ?? '',
+            description: row.description ?? '',
+            heightRatio: row.height_ratio,
+            pieces: [],
+          },
+        })
+      } catch {
+        sendJson(res, 503, { error: 'Falta correr db/009_section_blocks.sql' })
+      }
+      return
+    }
+
+    if (placeMatch && method === 'DELETE') {
+      if (!requireAuth(req, res)) return
+      if (!hasDatabase()) {
+        sendJson(res, 503, { error: 'DATABASE_URL no configurada' })
+        return
+      }
+      const url = new URL(req.url ?? '', 'http://local')
+      const canvasId = url.searchParams.get('canvasId') || ''
+      if (!/^[0-9a-f-]{36}$/i.test(canvasId)) {
+        sendJson(res, 400, { error: 'Bloque inválido' })
+        return
+      }
+      const db = sql()
+      await db`
+        delete from section_canvases
+        where id = ${canvasId} and section_slug = ${placeMatch[1]}
+      `
+      const leftover = (await db`
+        select id from section_canvases
+        where section_slug = ${placeMatch[1]}
+        order by sort_order
+      `) as { id: string }[]
+      for (let i = 0; i < leftover.length; i++) {
+        await db`update section_canvases set sort_order = ${i} where id = ${leftover[i].id}`
+      }
+      sendJson(res, 200, { ok: true })
       return
     }
 
@@ -241,17 +342,35 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         return
       }
       const body = await readJson<{
-        canvases?: { id: string; heightRatio?: number; pieces?: { id: string; x: number; y: number; width: number }[] }[]
+        canvases?: {
+          id: string
+          kind?: string
+          title?: string
+          description?: string
+          heightRatio?: number
+          pieces?: { id: string; x: number; y: number; width: number }[]
+        }[]
         pieces?: { id: string; x: number; y: number; width: number }[]
         heightRatio?: number
       }>(req)
       const db = sql()
-      const canvases = body.canvases?.length
-        ? body.canvases
-        : [{ id: 'legacy', heightRatio: body.heightRatio, pieces: body.pieces }]
+      const canvases = Array.isArray(body.canvases) ? body.canvases : []
       for (const canvas of canvases) {
-        if (typeof canvas.heightRatio === 'number' && /^[0-9a-f-]{36}$/i.test(canvas.id)) {
-          const ratio = Math.min(2.5, Math.max(0.6, canvas.heightRatio))
+        if (!/^[0-9a-f-]{36}$/i.test(canvas.id)) continue
+        const title = typeof canvas.title === 'string' ? canvas.title.slice(0, 200) : ''
+        const description =
+          typeof canvas.description === 'string' ? canvas.description.slice(0, 1200) : ''
+        const ratio =
+          typeof canvas.heightRatio === 'number' && Number.isFinite(canvas.heightRatio)
+            ? Math.min(2.5, Math.max(0.6, canvas.heightRatio))
+            : 1.2
+        try {
+          await db`
+            update section_canvases
+            set height_ratio = ${ratio}, title = ${title}, description = ${description}
+            where id = ${canvas.id} and section_slug = ${placeMatch[1]}
+          `
+        } catch {
           try {
             await db`
               update section_canvases set height_ratio = ${ratio}
@@ -261,7 +380,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
             /* section_canvases still missing until db/004 */
           }
         }
-        if (!Array.isArray(canvas.pieces)) continue
+        if (canvas.kind === 'text' || !Array.isArray(canvas.pieces)) continue
         for (const piece of canvas.pieces) {
           await db`
             update placements

@@ -11,7 +11,11 @@ import {
   type SectionCanvas,
 } from './api'
 
-const MAX_CANVASES = 3
+const MAX_PER_KIND = 4
+
+function blockKind(block: SectionCanvas): 'text' | 'canvas' {
+  return block.kind === 'text' ? 'text' : 'canvas'
+}
 
 type Props = {
   slug: string
@@ -26,6 +30,9 @@ export function AdminSectionCanvas({ slug }: Props) {
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileForCanvas = useRef<string | null>(null)
+
+  const textCount = canvases.filter((block) => blockKind(block) === 'text').length
+  const canvasCount = canvases.filter((block) => blockKind(block) === 'canvas').length
 
   const refresh = useCallback(async () => {
     const data = await apiGetPlacements(slug)
@@ -51,7 +58,7 @@ export function AdminSectionCanvas({ slug }: Props) {
     setStatus('Guardando…')
     try {
       const saved = await apiSavePlacements(slug, canvases)
-      if (saved.canvases?.length) setCanvases(saved.canvases)
+      if (saved.canvases) setCanvases(saved.canvases)
       setDirty(false)
       setStatus('Guardado')
     } catch (error) {
@@ -61,29 +68,29 @@ export function AdminSectionCanvas({ slug }: Props) {
     }
   }
 
-  const onAddCanvas = async () => {
-    if (canvases.length >= MAX_CANVASES) return
-    setStatus('Agregando lienzo…')
+  const onAdd = async (kind: 'text' | 'canvas') => {
+    const count = kind === 'text' ? textCount : canvasCount
+    if (count >= MAX_PER_KIND) return
+    setStatus(kind === 'text' ? 'Agregando texto…' : 'Agregando lienzo…')
     try {
-      const { canvas } = await apiAddCanvas(slug)
+      const { canvas } = await apiAddCanvas(slug, kind)
       setCanvases((prev) => [...prev, canvas])
-      setStatus('Lienzo agregado — acordate de guardar las obras')
+      setStatus(kind === 'text' ? 'Texto agregado — guardá cuando lo edites' : 'Lienzo agregado — acordate de guardar las obras')
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Error al agregar lienzo')
+      setStatus(error instanceof Error ? error.message : 'Error al agregar')
     }
   }
 
-  const onRemoveCanvas = async (canvasId: string) => {
-    if (canvases.length <= 1) return
-    if (!window.confirm('¿Quitar este lienzo y sus imágenes?')) return
-    setStatus('Quitando lienzo…')
+  const onRemove = async (canvasId: string) => {
+    if (!window.confirm('¿Quitar este bloque?')) return
+    setStatus('Quitando…')
     try {
       await apiDeleteCanvas(slug, canvasId)
       setCanvases((prev) => prev.filter((canvas) => canvas.id !== canvasId))
       if (selected?.canvasId === canvasId) setSelected(null)
-      setStatus('Lienzo quitado')
+      setStatus('Quitado')
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Error al quitar lienzo')
+      setStatus(error instanceof Error ? error.message : 'Error al quitar')
     }
   }
 
@@ -132,7 +139,7 @@ export function AdminSectionCanvas({ slug }: Props) {
     <section className="admin-panel admin-panel--canvas">
       <header className="admin-panel__head">
         <div>
-          <p className="admin-bar__kicker">Lienzo</p>
+          <p className="admin-bar__kicker">Serie</p>
           <h1>{section?.label ?? slug}</h1>
         </div>
         <div className="admin-bar__actions">
@@ -145,8 +152,16 @@ export function AdminSectionCanvas({ slug }: Props) {
           <button
             type="button"
             className="admin-bar__btn"
-            disabled={canvases.length >= MAX_CANVASES}
-            onClick={() => void onAddCanvas()}
+            disabled={textCount >= MAX_PER_KIND}
+            onClick={() => void onAdd('text')}
+          >
+            Agregar texto
+          </button>
+          <button
+            type="button"
+            className="admin-bar__btn"
+            disabled={canvasCount >= MAX_PER_KIND}
+            onClick={() => void onAdd('canvas')}
           >
             Agregar lienzo
           </button>
@@ -162,62 +177,103 @@ export function AdminSectionCanvas({ slug }: Props) {
       </header>
 
       <div className="admin-canvas-scroll">
-        {canvases.map((canvas, index) => (
-          <article key={canvas.id} className="admin-canvas-block">
-            <div className="admin-canvas-block__bar">
-              <p className="admin-bar__kicker">
-                Lienzo {index + 1} / {canvases.length}
-              </p>
-              <div className="admin-bar__actions">
-                <label className="admin-bar__btn">
-                  {uploading && fileForCanvas.current === canvas.id ? 'Subiendo…' : 'Subir imagen'}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    hidden
-                    disabled={uploading}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0]
-                      fileForCanvas.current = canvas.id
-                      if (file) void onUpload(file, canvas.id)
-                      e.target.value = ''
-                    }}
-                  />
-                </label>
-                {canvases.length > 1 && (
+        {canvases.length === 0 && (
+          <p className="admin-canvas-empty">Todavía no hay nada. Agregá un texto o un lienzo.</p>
+        )}
+        {canvases.map((canvas, index) =>
+          blockKind(canvas) === 'text' ? (
+            <article key={canvas.id} className="admin-canvas-block admin-series-text">
+              <div className="admin-canvas-block__bar">
+                <p className="admin-bar__kicker">Texto {index + 1}</p>
+                <button
+                  type="button"
+                  className="admin-bar__btn admin-bar__btn--danger"
+                  onClick={() => void onRemove(canvas.id)}
+                >
+                  Quitar
+                </button>
+              </div>
+              <input
+                className="admin-series-text__title"
+                value={canvas.title ?? ''}
+                maxLength={200}
+                placeholder="Título"
+                onChange={(e) =>
+                  markDirty(
+                    canvases.map((item) =>
+                      item.id === canvas.id ? { ...item, title: e.target.value } : item,
+                    ),
+                  )
+                }
+              />
+              <textarea
+                className="admin-series-text__body"
+                value={canvas.description ?? ''}
+                maxLength={1200}
+                placeholder="Descripción corta"
+                rows={4}
+                onChange={(e) =>
+                  markDirty(
+                    canvases.map((item) =>
+                      item.id === canvas.id ? { ...item, description: e.target.value } : item,
+                    ),
+                  )
+                }
+              />
+            </article>
+          ) : (
+            <article key={canvas.id} className="admin-canvas-block">
+              <div className="admin-canvas-block__bar">
+                <p className="admin-bar__kicker">Lienzo {index + 1}</p>
+                <div className="admin-bar__actions">
+                  <label className="admin-bar__btn">
+                    {uploading && fileForCanvas.current === canvas.id ? 'Subiendo…' : 'Subir imagen'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      hidden
+                      disabled={uploading}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        fileForCanvas.current = canvas.id
+                        if (file) void onUpload(file, canvas.id)
+                        e.target.value = ''
+                      }}
+                    />
+                  </label>
                   <button
                     type="button"
                     className="admin-bar__btn admin-bar__btn--danger"
-                    onClick={() => void onRemoveCanvas(canvas.id)}
+                    onClick={() => void onRemove(canvas.id)}
                   >
                     Quitar lienzo
                   </button>
-                )}
+                </div>
               </div>
-            </div>
-            <FreeCanvas
-              pieces={canvas.pieces}
-              heightRatio={canvas.heightRatio}
-              heightInputId={`canvas-height-${canvas.id}`}
-              selectedId={selected?.canvasId === canvas.id ? selected.pieceId : null}
-              onSelect={(pieceId) =>
-                setSelected(pieceId ? { canvasId: canvas.id, pieceId } : null)
-              }
-              onChange={(pieces) =>
-                markDirty(
-                  canvases.map((item) => (item.id === canvas.id ? { ...item, pieces } : item)),
-                )
-              }
-              onHeightRatioChange={(heightRatio) =>
-                markDirty(
-                  canvases.map((item) =>
-                    item.id === canvas.id ? { ...item, heightRatio } : item,
-                  ),
-                )
-              }
-            />
-          </article>
-        ))}
+              <FreeCanvas
+                pieces={canvas.pieces}
+                heightRatio={canvas.heightRatio}
+                heightInputId={`canvas-height-${canvas.id}`}
+                selectedId={selected?.canvasId === canvas.id ? selected.pieceId : null}
+                onSelect={(pieceId) =>
+                  setSelected(pieceId ? { canvasId: canvas.id, pieceId } : null)
+                }
+                onChange={(pieces) =>
+                  markDirty(
+                    canvases.map((item) => (item.id === canvas.id ? { ...item, pieces } : item)),
+                  )
+                }
+                onHeightRatioChange={(heightRatio) =>
+                  markDirty(
+                    canvases.map((item) =>
+                      item.id === canvas.id ? { ...item, heightRatio } : item,
+                    ),
+                  )
+                }
+              />
+            </article>
+          ),
+        )}
       </div>
     </section>
   )

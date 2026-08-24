@@ -1,6 +1,6 @@
 const COOKIE = 'jt_admin'
 const CANVAS_SLUGS = new Set(['trabajos', 'exposiciones', 'archivos'])
-const MAX_CANVASES = 3
+const MAX_PER_KIND = 4
 
 function cookies(header: string) {
   const out: Record<string, string> = {}
@@ -59,11 +59,18 @@ type CanvasRow = {
   id: string
   sort_order: number
   height_ratio: number
+  kind?: string | null
+  title?: string | null
+  description?: string | null
 }
 
 function clampPct(value: number, min: number, max: number) {
   if (!Number.isFinite(value)) return min
   return Math.min(max, Math.max(min, value))
+}
+
+function clip(value: string, max: number) {
+  return value.slice(0, max)
 }
 
 function toPieces(rows: PlaceRow[]) {
@@ -83,6 +90,18 @@ function toPieces(rows: PlaceRow[]) {
   })
 }
 
+function toBlock(canvas: CanvasRow, pieces: ReturnType<typeof toPieces>) {
+  const kind = canvas.kind === 'text' ? 'text' : 'canvas'
+  return {
+    id: canvas.id,
+    kind,
+    title: canvas.title ?? '',
+    description: canvas.description ?? '',
+    heightRatio: canvas.height_ratio ?? 1.2,
+    pieces: kind === 'text' ? [] : pieces,
+  }
+}
+
 async function readCanvases(
   sql: (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown>,
   slug: string,
@@ -90,13 +109,22 @@ async function readCanvases(
   let canvasRows: CanvasRow[] = []
   try {
     canvasRows = (await sql`
-      select id, sort_order, height_ratio
+      select id, sort_order, height_ratio, kind, title, description
       from section_canvases
       where section_slug = ${slug}
       order by sort_order
     `) as CanvasRow[]
   } catch {
-    canvasRows = []
+    try {
+      canvasRows = (await sql`
+        select id, sort_order, height_ratio
+        from section_canvases
+        where section_slug = ${slug}
+        order by sort_order
+      `) as CanvasRow[]
+    } catch {
+      canvasRows = []
+    }
   }
 
   const placeRows = (await sql`
@@ -107,34 +135,16 @@ async function readCanvases(
     order by p.z_index, p.created_at
   `) as PlaceRow[]
 
-  if (canvasRows.length === 0) {
-    let heightRatio = 1.2
-    try {
-      const ratioRows = (await sql`
-        select height_ratio from sections where slug = ${slug}
-      `) as { height_ratio: number }[]
-      heightRatio = ratioRows[0]?.height_ratio ?? 1.2
-    } catch {
-      heightRatio = 1.2
-    }
-    return [
-      {
-        id: 'legacy',
-        heightRatio,
-        pieces: toPieces(placeRows),
-      },
-    ]
-  }
-
-  return canvasRows.map((canvas, index) => ({
-    id: canvas.id,
-    heightRatio: canvas.height_ratio ?? 1.2,
-    pieces: toPieces(
-      placeRows.filter(
-        (row) => row.canvas_id === canvas.id || (index === 0 && !row.canvas_id),
+  return canvasRows.map((canvas, index) =>
+    toBlock(
+      canvas,
+      toPieces(
+        placeRows.filter(
+          (row) => row.canvas_id === canvas.id || (index === 0 && !row.canvas_id && canvas.kind !== 'text'),
+        ),
       ),
     ),
-  }))
+  )
 }
 
 export default {
@@ -148,11 +158,7 @@ export default {
       const dbUrl = process.env.DATABASE_URL
       if (!dbUrl) {
         if (request.method === 'GET') {
-          return Response.json({
-            canvases: [{ id: 'legacy', heightRatio: 1.2, pieces: [] }],
-            pieces: [],
-            heightRatio: 1.2,
-          })
+          return Response.json({ canvases: [], pieces: [], heightRatio: 1.2 })
         }
         return Response.json({ error: 'DATABASE_URL no configurada' }, { status: 503 })
       }
@@ -164,8 +170,8 @@ export default {
         const canvases = await readCanvases(sql, slug)
         return Response.json({
           canvases,
-          pieces: canvases[0]?.pieces ?? [],
-          heightRatio: canvases[0]?.heightRatio ?? 1.2,
+          pieces: canvases.find((block) => block.kind === 'canvas')?.pieces ?? [],
+          heightRatio: canvases.find((block) => block.kind === 'canvas')?.heightRatio ?? 1.2,
         })
       }
 
@@ -174,37 +180,55 @@ export default {
       }
 
       if (request.method === 'POST') {
-        const existing = (await sql`
-          select id from section_canvases where section_slug = ${slug}
-        `) as { id: string }[]
-        if (existing.length >= MAX_CANVASES) {
-          return Response.json({ error: 'Máximo 3 lienzos por sección' }, { status: 400 })
+        const payload = (await request.json().catch(() => ({}))) as { kind?: string }
+        const kind = payload.kind === 'text' ? 'text' : 'canvas'
+        let existing: { id: string; kind?: string | null }[] = []
+        try {
+          existing = (await sql`
+            select id, kind from section_canvases where section_slug = ${slug}
+          `) as { id: string; kind?: string | null }[]
+        } catch {
+          existing = (await sql`
+            select id from section_canvases where section_slug = ${slug}
+          `) as { id: string }[]
+        }
+        const ofKind = existing.filter((row) => (row.kind || 'canvas') === kind)
+        if (ofKind.length >= MAX_PER_KIND) {
+          return Response.json(
+            { error: kind === 'text' ? 'Máximo 4 textos por sección' : 'Máximo 4 lienzos por sección' },
+            { status: 400 },
+          )
         }
         const nextOrder = existing.length
-        const created = (await sql`
-          insert into section_canvases (section_slug, sort_order, height_ratio)
-          values (${slug}, ${nextOrder}, 1.2)
-          returning id, height_ratio
-        `) as { id: string; height_ratio: number }[]
-        return Response.json({
-          canvas: {
-            id: created[0].id,
-            heightRatio: created[0].height_ratio,
-            pieces: [],
-          },
-        })
+        try {
+          const created = (await sql`
+            insert into section_canvases (section_slug, sort_order, height_ratio, kind, title, description)
+            values (${slug}, ${nextOrder}, 1.2, ${kind}, '', '')
+            returning id, height_ratio, kind, title, description
+          `) as { id: string; height_ratio: number; kind: string; title: string; description: string }[]
+          const row = created[0]
+          return Response.json({
+            canvas: {
+              id: row.id,
+              kind: row.kind === 'text' ? 'text' : 'canvas',
+              title: row.title ?? '',
+              description: row.description ?? '',
+              heightRatio: row.height_ratio,
+              pieces: [],
+            },
+          })
+        } catch {
+          return Response.json(
+            { error: 'Falta correr db/009_section_blocks.sql en Neon' },
+            { status: 503 },
+          )
+        }
       }
 
       if (request.method === 'DELETE') {
         const canvasId = new URL(request.url).searchParams.get('canvasId') || ''
         if (!isUuid(canvasId)) {
-          return Response.json({ error: 'Lienzo inválido' }, { status: 400 })
-        }
-        const existing = (await sql`
-          select id from section_canvases where section_slug = ${slug}
-        `) as { id: string }[]
-        if (existing.length <= 1) {
-          return Response.json({ error: 'Tiene que quedar al menos un lienzo' }, { status: 400 })
+          return Response.json({ error: 'Bloque inválido' }, { status: 400 })
         }
         await sql`
           delete from section_canvases
@@ -231,26 +255,37 @@ export default {
           y: number
           width: number
         }
+        type BlockIn = {
+          id: string
+          kind?: string
+          title?: string
+          description?: string
+          heightRatio?: number
+          pieces?: PieceIn[]
+        }
         const body = (await request.json().catch(() => ({}))) as {
-          canvases?: { id: string; heightRatio?: number; pieces?: PieceIn[] }[]
+          canvases?: BlockIn[]
           pieces?: PieceIn[]
           heightRatio?: number
         }
 
-        const canvases: { id: string; heightRatio?: number; pieces?: PieceIn[] }[] =
-          body.canvases && body.canvases.length > 0
-            ? body.canvases.slice(0, MAX_CANVASES)
-            : [
-                {
-                  id: 'legacy',
-                  heightRatio: body.heightRatio,
-                  pieces: body.pieces ?? [],
-                },
-              ]
+        const canvases: BlockIn[] = Array.isArray(body.canvases) ? body.canvases : []
+
+        const textCount = canvases.filter((block) => block.kind === 'text').length
+        const canvasCount = canvases.length - textCount
+        if (textCount > MAX_PER_KIND || canvasCount > MAX_PER_KIND) {
+          return Response.json({ error: 'Máximo 4 textos y 4 lienzos por sección' }, { status: 400 })
+        }
 
         const saved = await readCanvases(sql, slug)
         for (let i = 0; i < canvases.length; i++) {
           const canvas = canvases[i]
+          const kind = canvas.kind === 'text' ? 'text' : 'canvas'
+          const title = clip(typeof canvas.title === 'string' ? canvas.title : '', 200)
+          const description = clip(
+            typeof canvas.description === 'string' ? canvas.description : '',
+            1200,
+          )
           const ratio =
             typeof canvas.heightRatio === 'number' && Number.isFinite(canvas.heightRatio)
               ? Math.min(2.5, Math.max(0.6, canvas.heightRatio))
@@ -258,53 +293,63 @@ export default {
           let canvasId = isUuid(canvas.id) ? canvas.id : saved[i]?.id
           if (!canvasId) {
             const created = (await sql`
-              insert into section_canvases (section_slug, sort_order, height_ratio)
-              values (${slug}, ${i}, ${ratio})
+              insert into section_canvases (section_slug, sort_order, height_ratio, kind, title, description)
+              values (${slug}, ${i}, ${ratio}, ${kind}, ${title}, ${description})
               returning id
             `) as { id: string }[]
             canvasId = created[0]?.id
           }
           if (!canvasId) {
-            return Response.json({ error: 'No se pudo guardar el lienzo' }, { status: 500 })
+            return Response.json({ error: 'No se pudo guardar el bloque' }, { status: 500 })
           }
-          await sql`
-            update section_canvases
-            set height_ratio = ${ratio}, sort_order = ${i}
-            where id = ${canvasId} and section_slug = ${slug}
-          `
-          if (Array.isArray(canvas.pieces)) {
-            const keepIds = canvas.pieces.map((piece) => piece.id).filter(isUuid)
-            if (keepIds.length === 0) {
-              await sql`delete from placements where canvas_id = ${canvasId} and section_slug = ${slug}`
-            } else {
+          try {
+            await sql`
+              update section_canvases
+              set height_ratio = ${ratio},
+                  sort_order = ${i},
+                  title = ${title},
+                  description = ${description}
+              where id = ${canvasId} and section_slug = ${slug}
+            `
+          } catch {
+            await sql`
+              update section_canvases
+              set height_ratio = ${ratio}, sort_order = ${i}
+              where id = ${canvasId} and section_slug = ${slug}
+            `
+          }
+          if (kind === 'text' || !Array.isArray(canvas.pieces)) continue
+          const keepIds = canvas.pieces.map((piece) => piece.id).filter(isUuid)
+          if (keepIds.length === 0) {
+            await sql`delete from placements where canvas_id = ${canvasId} and section_slug = ${slug}`
+          } else {
+            await sql`
+              delete from placements
+              where canvas_id = ${canvasId}
+                and section_slug = ${slug}
+                and not (id = any(${keepIds}))
+            `
+          }
+          for (const piece of canvas.pieces) {
+            const x = clampPct(piece.x, 0, 95)
+            const y = clampPct(piece.y, 0, 98)
+            const width = clampPct(piece.width, 5, 90)
+            if (isUuid(piece.id)) {
               await sql`
-                delete from placements
-                where canvas_id = ${canvasId}
-                  and section_slug = ${slug}
-                  and not (id = any(${keepIds}))
+                update placements
+                set x = ${x},
+                    y = ${y},
+                    width = ${width},
+                    canvas_id = ${canvasId}
+                where id = ${piece.id} and section_slug = ${slug}
               `
+              continue
             }
-            for (const piece of canvas.pieces) {
-              const x = clampPct(piece.x, 0, 95)
-              const y = clampPct(piece.y, 0, 98)
-              const width = clampPct(piece.width, 5, 90)
-              if (isUuid(piece.id)) {
-                await sql`
-                  update placements
-                  set x = ${x},
-                      y = ${y},
-                      width = ${width},
-                      canvas_id = ${canvasId}
-                  where id = ${piece.id} and section_slug = ${slug}
-                `
-                continue
-              }
-              if (piece.mediaId && isUuid(piece.mediaId)) {
-                await sql`
-                  insert into placements (section_slug, media_id, canvas_id, x, y, width, z_index)
-                  values (${slug}, ${piece.mediaId}, ${canvasId}, ${x}, ${y}, ${width}, 0)
-                `
-              }
+            if (piece.mediaId && isUuid(piece.mediaId)) {
+              await sql`
+                insert into placements (section_slug, media_id, canvas_id, x, y, width, z_index)
+                values (${slug}, ${piece.mediaId}, ${canvasId}, ${x}, ${y}, ${width}, 0)
+              `
             }
           }
         }
@@ -312,8 +357,8 @@ export default {
         return Response.json({
           ok: true,
           canvases: canvasesOut,
-          pieces: canvasesOut[0]?.pieces ?? [],
-          heightRatio: canvasesOut[0]?.heightRatio ?? 1.2,
+          pieces: canvasesOut.find((block) => block.kind === 'canvas')?.pieces ?? [],
+          heightRatio: canvasesOut.find((block) => block.kind === 'canvas')?.heightRatio ?? 1.2,
         })
       }
 

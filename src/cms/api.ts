@@ -116,6 +116,9 @@ export type CanvasPiece = {
 
 export type SectionCanvas = {
   id: string
+  kind?: 'text' | 'canvas'
+  title?: string
+  description?: string
   heightRatio: number
   pieces: CanvasPiece[]
 }
@@ -126,11 +129,7 @@ export async function apiGetPlacements(slug: string) {
     pieces?: CanvasPiece[]
     heightRatio?: number
   }>(`/api/placements/${slug}`)
-  const canvases =
-    data.canvases && data.canvases.length > 0
-      ? data.canvases
-      : [{ id: 'legacy', heightRatio: data.heightRatio ?? 1.2, pieces: data.pieces ?? [] }]
-  return { canvases }
+  return { canvases: data.canvases ?? [] }
 }
 
 export async function apiSavePlacements(slug: string, canvases: SectionCanvas[]) {
@@ -140,8 +139,11 @@ export async function apiSavePlacements(slug: string, canvases: SectionCanvas[])
   })
 }
 
-export async function apiAddCanvas(slug: string) {
-  return request<{ canvas: SectionCanvas }>(`/api/placements/${slug}`, { method: 'POST' })
+export async function apiAddCanvas(slug: string, kind: 'text' | 'canvas' = 'canvas') {
+  return request<{ canvas: SectionCanvas }>(`/api/placements/${slug}`, {
+    method: 'POST',
+    body: JSON.stringify({ kind }),
+  })
 }
 
 export async function apiDeleteCanvas(slug: string, canvasId: string) {
