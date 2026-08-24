@@ -4,6 +4,8 @@ import { CanvasViewer } from '../canvas/CanvasViewer'
 import { apiGetCopy, apiGetPlacements, type SectionCanvas } from '../cms/api'
 import type { Section } from '../data/sections'
 
+const CANVAS_SECTIONS = new Set(['trabajos', 'exposiciones', 'archivos'])
+
 type Props = {
   section: Section
 }
@@ -13,24 +15,49 @@ export function SectionView({ section }: Props) {
   const [body, setBody] = useState('')
   const [portraitUrl, setPortraitUrl] = useState('')
   const [canvases, setCanvases] = useState<SectionCanvas[]>([])
+  const [ready, setReady] = useState(false)
+  const [loadedId, setLoadedId] = useState(section.id)
+
+  if (loadedId !== section.id) {
+    setLoadedId(section.id)
+    setReady(false)
+    setBody('')
+    setPortraitUrl('')
+    setCanvases([])
+  }
 
   useEffect(() => {
-    void apiGetCopy(section.id)
+    let cancelled = false
+
+    const copy = apiGetCopy(section.id)
       .then((data) => {
+        if (cancelled) return
         setBody(data.body)
         setPortraitUrl(data.portraitUrl ?? '')
       })
       .catch(() => {
+        if (cancelled) return
         setBody('')
         setPortraitUrl('')
       })
-    if (section.id === 'bio') {
-      setCanvases([])
-      return
+
+    const placements = CANVAS_SECTIONS.has(section.id)
+      ? apiGetPlacements(section.id)
+          .then((data) => {
+            if (!cancelled) setCanvases(data.canvases)
+          })
+          .catch(() => {
+            if (!cancelled) setCanvases([])
+          })
+      : Promise.resolve()
+
+    void Promise.all([copy, placements]).finally(() => {
+      if (!cancelled) setReady(true)
+    })
+
+    return () => {
+      cancelled = true
     }
-    void apiGetPlacements(section.id)
-      .then((data) => setCanvases(data.canvases))
-      .catch(() => setCanvases([]))
   }, [section.id])
 
   const visible = canvases.filter((canvas) => canvas.pieces.length > 0)
@@ -48,7 +75,7 @@ export function SectionView({ section }: Props) {
         <span className="section-view__spacer" aria-hidden />
       </header>
 
-      {isBio ? (
+      {!ready ? null : isBio ? (
         <div className="bio">
           <div className="bio__text">{body}</div>
           <div className="bio__portrait">

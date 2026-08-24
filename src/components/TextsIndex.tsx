@@ -10,11 +10,25 @@ export function TextsIndex() {
   const navigate = useNavigate()
   const [texts, setTexts] = useState<TextEntry[]>([])
   const [error, setError] = useState('')
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
+    let cancelled = false
+    setReady(false)
     void apiListTexts()
-      .then((data) => setTexts(data.texts))
-      .catch(() => setError('No se pudieron cargar los textos.'))
+      .then((data) => {
+        if (cancelled) return
+        setTexts(data.texts)
+      })
+      .catch(() => {
+        if (!cancelled) setError('No se pudieron cargar los textos.')
+      })
+      .finally(() => {
+        if (!cancelled) setReady(true)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   return (
@@ -32,7 +46,7 @@ export function TextsIndex() {
       <div className="texts-index">
         <p className="texts-index__kicker">textos</p>
         {error && <p className="section-view__note">{error}</p>}
-        {!error && texts.length === 0 && (
+        {ready && !error && texts.length === 0 && (
           <p className="section-view__note">Todavía no hay textos publicados.</p>
         )}
         <ul className="texts-index__list">
