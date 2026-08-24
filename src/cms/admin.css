@@ -95,6 +95,11 @@
   border-color: var(--ink);
 }
 
+.admin-bar__btn--danger {
+  border-color: rgba(140, 32, 32, 0.35);
+  color: #8c2020;
+}
+
 .hero.hero--admin {
   flex: 1;
   height: auto;
@@ -371,6 +376,23 @@
   min-height: 0;
   overflow-x: hidden;
   overflow-y: scroll;
+  display: flex;
+  flex-direction: column;
+  gap: 2.2rem;
+  padding-bottom: 2rem;
+}
+
+.admin-canvas-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.admin-canvas-block__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
 }
 
 .admin-panel__head {

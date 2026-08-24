@@ -30,6 +30,7 @@ export type CanvasEditorProps = {
   selectedId?: string | null
   onSelect?: (id: string | null) => void
   showHeightControl?: boolean
+  heightInputId?: string
 }
 
 export function CanvasEditor({
@@ -40,6 +41,7 @@ export function CanvasEditor({
   selectedId = null,
   onSelect,
   showHeightControl = true,
+  heightInputId = 'canvas-height',
 }: CanvasEditorProps) {
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const interaction = useRef<Interaction>(null)
@@ -109,9 +111,9 @@ export function CanvasEditor({
     <div className="studio-canvas">
       {showHeightControl && onHeightRatioChange && (
         <div className="studio-canvas__height">
-          <label htmlFor="canvas-height">Alto del lienzo</label>
+          <label htmlFor={heightInputId}>Alto del lienzo</label>
           <input
-            id="canvas-height"
+            id={heightInputId}
             type="range"
             min={0.6}
             max={2.5}
@@ -132,6 +134,9 @@ export function CanvasEditor({
         ref={canvasRef}
         className="studio-canvas__board"
         style={{ paddingTop: `${heightRatio * 100}%` }}
+        onPointerDown={(e) => {
+          if (e.target === e.currentTarget) onSelect?.(null)
+        }}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}

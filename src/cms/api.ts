@@ -75,24 +75,46 @@ export type CanvasPiece = {
   y: number
   width: number
   z?: number
+  mediaId?: string
+}
+
+export type SectionCanvas = {
+  id: string
+  heightRatio: number
+  pieces: CanvasPiece[]
 }
 
 export async function apiGetPlacements(slug: string) {
-  return request<{ pieces: CanvasPiece[]; heightRatio: number }>(`/api/placements/${slug}`)
+  const data = await request<{
+    canvases?: SectionCanvas[]
+    pieces?: CanvasPiece[]
+    heightRatio?: number
+  }>(`/api/placements/${slug}`)
+  const canvases =
+    data.canvases && data.canvases.length > 0
+      ? data.canvases
+      : [{ id: 'legacy', heightRatio: data.heightRatio ?? 1.2, pieces: data.pieces ?? [] }]
+  return { canvases }
 }
 
-export async function apiSavePlacements(
-  slug: string,
-  pieces: CanvasPiece[],
-  heightRatio?: number,
-) {
+export async function apiSavePlacements(slug: string, canvases: SectionCanvas[]) {
   return request<{ ok: boolean }>(`/api/placements/${slug}`, {
     method: 'PUT',
-    body: JSON.stringify({ pieces, heightRatio }),
+    body: JSON.stringify({ canvases }),
   })
 }
 
-export async function apiUploadMedia(file: File, section?: string) {
+export async function apiAddCanvas(slug: string) {
+  return request<{ canvas: SectionCanvas }>(`/api/placements/${slug}`, { method: 'POST' })
+}
+
+export async function apiDeleteCanvas(slug: string, canvasId: string) {
+  return request<{ ok: boolean }>(`/api/placements/${slug}?canvasId=${canvasId}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function apiUploadMedia(file: File, section?: string, canvasId?: string) {
   const { downscaleImage } = await import('./downscaleImage')
   const payload = await downscaleImage(file)
   const res = await fetch('/api/media', {
@@ -102,6 +124,7 @@ export async function apiUploadMedia(file: File, section?: string) {
       'Content-Type': payload.type || 'application/octet-stream',
       'x-filename': payload.name,
       ...(section ? { 'x-section': section } : {}),
+      ...(canvasId ? { 'x-canvas-id': canvasId } : {}),
     },
     body: payload,
   })

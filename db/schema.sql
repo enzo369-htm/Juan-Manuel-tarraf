@@ -27,10 +27,19 @@ create table if not exists hero_gates (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists section_canvases (
+  id uuid primary key default gen_random_uuid(),
+  section_slug text not null references sections (slug) on delete cascade,
+  sort_order int not null default 0,
+  height_ratio double precision not null default 1.2,
+  unique (section_slug, sort_order)
+);
+
 create table if not exists placements (
   id uuid primary key default gen_random_uuid(),
   section_slug text not null references sections (slug) on delete cascade,
   media_id uuid not null references media (id) on delete cascade,
+  canvas_id uuid references section_canvases (id) on delete cascade,
   x double precision not null default 8,
   y double precision not null default 8,
   width double precision not null default 24,
@@ -75,3 +84,9 @@ insert into section_copy (section_slug, body) values
   ('textos', ''),
   ('contacto', '')
 on conflict (section_slug) do nothing;
+
+insert into section_canvases (section_slug, sort_order, height_ratio)
+select slug, 0, coalesce(height_ratio, 1.2)
+from sections
+where kind = 'canvas'
+on conflict (section_slug, sort_order) do nothing;

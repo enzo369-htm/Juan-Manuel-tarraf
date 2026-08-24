@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import type { CanvasPiece } from '../cms/api'
 import { CanvasEditor } from './CanvasEditor'
 import type { CanvasItem } from './types'
@@ -8,6 +8,9 @@ type Props = {
   onChange: (pieces: CanvasPiece[]) => void
   heightRatio: number
   onHeightRatioChange: (ratio: number) => void
+  selectedId?: string | null
+  onSelect?: (id: string | null) => void
+  heightInputId?: string
 }
 
 function toItems(pieces: CanvasPiece[]): CanvasItem[] {
@@ -30,21 +33,30 @@ function toPieces(items: CanvasItem[], previous: CanvasPiece[]): CanvasPiece[] {
       y: item.y,
       width: item.width,
       z: prior?.z,
+      mediaId: prior?.mediaId,
     }
   })
 }
 
 /** Host adapter: our pieces { id, src, x, y, width } ↔ studio-core CanvasItem. */
-export function FreeCanvas({ pieces, onChange, heightRatio, onHeightRatioChange }: Props) {
+export function FreeCanvas({
+  pieces,
+  onChange,
+  heightRatio,
+  onHeightRatioChange,
+  selectedId = null,
+  onSelect,
+  heightInputId,
+}: Props) {
   const items = useMemo(() => toItems(pieces), [pieces])
-  const [selectedId, setSelectedId] = useState<string | null>(null)
 
   return (
     <CanvasEditor
       items={items}
       heightRatio={heightRatio}
       selectedId={selectedId}
-      onSelect={setSelectedId}
+      onSelect={onSelect}
+      heightInputId={heightInputId}
       onHeightRatioChange={onHeightRatioChange}
       onChange={(next) => onChange(toPieces(next, pieces))}
     />

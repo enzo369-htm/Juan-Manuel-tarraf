@@ -283,7 +283,7 @@ html.page-scroll #root {
   flex-direction: column;
   align-items: stretch;
   justify-content: flex-start;
-  gap: 2rem;
+  gap: 3.2rem;
   padding: 2.4rem 1.5rem 3rem;
 }
 

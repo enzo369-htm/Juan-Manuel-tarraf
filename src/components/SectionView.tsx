@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CanvasViewer } from '../canvas/CanvasViewer'
-import { apiGetCopy, apiGetPlacements, type CanvasPiece } from '../cms/api'
+import { apiGetCopy, apiGetPlacements, type SectionCanvas } from '../cms/api'
 import type { Section } from '../data/sections'
 
 type Props = {
@@ -11,20 +11,18 @@ type Props = {
 export function SectionView({ section }: Props) {
   const navigate = useNavigate()
   const [body, setBody] = useState('')
-  const [pieces, setPieces] = useState<CanvasPiece[]>([])
-  const [heightRatio, setHeightRatio] = useState(1.2)
+  const [canvases, setCanvases] = useState<SectionCanvas[]>([])
 
   useEffect(() => {
     void apiGetCopy(section.id)
       .then((data) => setBody(data.body))
       .catch(() => setBody(''))
     void apiGetPlacements(section.id)
-      .then((data) => {
-        setPieces(data.pieces)
-        setHeightRatio(data.heightRatio ?? 1.2)
-      })
-      .catch(() => setPieces([]))
+      .then((data) => setCanvases(data.canvases))
+      .catch(() => setCanvases([]))
   }, [section.id])
+
+  const visible = canvases.filter((canvas) => canvas.pieces.length > 0)
 
   return (
     <section className="section-view" aria-labelledby="section-title">
@@ -40,10 +38,11 @@ export function SectionView({ section }: Props) {
 
       <div className="section-view__body">
         {body && <div className="section-view__copy">{body}</div>}
-        {pieces.length > 0 && (
+        {visible.map((canvas) => (
           <CanvasViewer
-            heightRatio={heightRatio}
-            items={pieces.map((piece) => ({
+            key={canvas.id}
+            heightRatio={canvas.heightRatio}
+            items={canvas.pieces.map((piece) => ({
               id: piece.id,
               imageUrl: piece.src,
               x: piece.x,
@@ -51,8 +50,8 @@ export function SectionView({ section }: Props) {
               width: piece.width,
             }))}
           />
-        )}
-        {!body && pieces.length === 0 && (
+        ))}
+        {!body && visible.length === 0 && (
           <p className="section-view__note">
             Espacio de {section.label.toLowerCase()}. El contenido se carga desde el CMS.
           </p>

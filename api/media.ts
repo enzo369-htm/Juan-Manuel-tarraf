@@ -101,14 +101,32 @@ export default {
         values (${id}, ${hasR2() ? key : null}, ${url}, ${mime})
       `
 
+      const canvasId = request.headers.get('x-canvas-id') || ''
       let placementId: string | null = null
       if (section) {
-        const placed = (await sql`
-          insert into placements (section_slug, media_id, x, y, width, z_index)
-          values (${section}, ${id}, 8, 8, 24, 0)
-          returning id
-        `) as { id: string }[]
-        placementId = placed[0]?.id ?? null
+        const uuid =
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(canvasId)
+        try {
+          const placed = uuid
+            ? ((await sql`
+                insert into placements (section_slug, media_id, canvas_id, x, y, width, z_index)
+                values (${section}, ${id}, ${canvasId}, 8, 8, 24, 0)
+                returning id
+              `) as { id: string }[])
+            : ((await sql`
+                insert into placements (section_slug, media_id, x, y, width, z_index)
+                values (${section}, ${id}, 8, 8, 24, 0)
+                returning id
+              `) as { id: string }[])
+          placementId = placed[0]?.id ?? null
+        } catch {
+          const placed = (await sql`
+            insert into placements (section_slug, media_id, x, y, width, z_index)
+            values (${section}, ${id}, 8, 8, 24, 0)
+            returning id
+          `) as { id: string }[]
+          placementId = placed[0]?.id ?? null
+        }
       }
 
       const publicBase = (process.env.R2_PUBLIC_BASE_URL || '').replace(/\/$/, '')
