@@ -16,17 +16,6 @@ type DragState = {
   moved: boolean
 }
 
-function formatSavedAt(iso: string) {
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime()) || date.getTime() === 0) return 'Diseño inicial'
-  return date.toLocaleString('es-AR', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
 function applyPiece(list: Work[], id: SectionId, x: number, y: number, width: number) {
   const next = clampPiece(id, x, y, width)
   return list.map((w) =>
@@ -56,6 +45,7 @@ export function AdminEditor() {
   const [draft, setDraft] = useState<Work[]>(works)
   const [selectedId, setSelectedId] = useState<SectionId | null>(null)
   const [status, setStatus] = useState('Listo')
+  const [saving, setSaving] = useState(false)
   const viewportRef = useRef<HTMLElement>(null)
   const worldRef = useRef<HTMLDivElement>(null)
   const draftRef = useRef(draft)
@@ -76,11 +66,15 @@ export function AdminEditor() {
       const positions = Object.fromEntries(
         nextWorks.map((w) => [w.id, { x: w.x, y: w.y, width: w.width }]),
       ) as typeof layout.positions
+      setSaving(true)
+      setStatus('Guardando…')
       try {
         await save({ version: 1, updatedAt: layout.updatedAt, positions })
         setStatus('Guardado')
       } catch (error) {
         setStatus(error instanceof Error ? error.message : 'Error')
+      } finally {
+        setSaving(false)
       }
     },
     [layout.updatedAt, save],
@@ -190,9 +184,8 @@ export function AdminEditor() {
           Vista completa al entrar. Rueda: zoom. Fondo: pan. Obras: mover. Esquina: tamaño.
         </p>
         <div className="admin-bar__actions">
-          <span className="admin-bar__status">
+          <span className={`admin-bar__status${status === 'Guardado' ? ' is-saved' : ''}`}>
             {status}
-            {status === 'Guardado' || status === 'Listo' ? ` · ${formatSavedAt(layout.updatedAt)}` : ''}
           </span>
           <div className="admin-bar__zoom">
             <button type="button" className="admin-bar__btn" onClick={() => zoomBy(0.85)} aria-label="Alejar">
@@ -228,9 +221,10 @@ export function AdminEditor() {
           <button
             type="button"
             className="admin-bar__btn admin-bar__btn--primary"
+            disabled={saving}
             onClick={() => void persist(draft)}
           >
-            Guardar
+            {saving ? 'Guardando…' : status === 'Guardado' ? 'Guardado' : 'Guardar'}
           </button>
         </div>
       </header>

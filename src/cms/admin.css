@@ -59,7 +59,8 @@
   white-space: nowrap;
 }
 
-.admin-bar__status.is-dirty {
+.admin-bar__status.is-dirty,
+.admin-bar__status.is-saved {
   color: var(--ink);
 }
 
