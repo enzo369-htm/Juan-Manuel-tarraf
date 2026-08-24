@@ -68,7 +68,9 @@ export default {
           left join media m on m.id = g.media_id
           order by g.section_slug
         `) as HeroRow[]
-        return Response.json(toHeroLayout(rows))
+        return Response.json(toHeroLayout(rows), {
+          headers: { 'Cache-Control': 'no-store' },
+        })
       }
 
       if (request.method === 'PUT') {
@@ -95,7 +97,9 @@ export default {
           left join media m on m.id = g.media_id
           order by g.section_slug
         `) as HeroRow[]
-        return Response.json(toHeroLayout(rows))
+        return Response.json(toHeroLayout(rows), {
+          headers: { 'Cache-Control': 'no-store' },
+        })
       }
 
       return Response.json({ error: 'Method not allowed' }, { status: 405 })

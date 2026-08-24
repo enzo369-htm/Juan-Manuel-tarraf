@@ -56,10 +56,9 @@ export function AdminEditor() {
 
   useEffect(() => {
     if (!ready) return
+    if (dragRef.current) return
     setDraft(works)
-    // Solo al terminar de cargar el layout inicial.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready])
+  }, [ready, layout.updatedAt, works])
 
   const persist = useCallback(
     async (nextWorks: Work[]) => {

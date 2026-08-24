@@ -1,9 +1,9 @@
-import { defaultLayout } from './defaults'
 import type { HeroLayout } from './types'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     credentials: 'include',
+    cache: 'no-store',
     ...init,
     headers: {
       'Content-Type': 'application/json',
@@ -39,11 +39,7 @@ export async function apiLogout() {
 }
 
 export async function apiGetHero(): Promise<HeroLayout> {
-  try {
-    return await request<HeroLayout>('/api/hero')
-  } catch {
-    return defaultLayout()
-  }
+  return request<HeroLayout>('/api/hero')
 }
 
 export async function apiSaveHero(layout: HeroLayout): Promise<HeroLayout> {

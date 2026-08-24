@@ -7,7 +7,7 @@ import { WorkPiece } from './WorkPiece'
 
 export function HeroCanvas() {
   const navigate = useNavigate()
-  const { works } = useHeroLayout()
+  const { works, ready } = useHeroLayout()
   const viewportRef = useRef<HTMLElement>(null)
   const worldRef = useRef<HTMLDivElement>(null)
   const [hintVisible, setHintVisible] = useState(true)
@@ -60,14 +60,16 @@ export function HeroCanvas() {
           height: WORLD.height,
         }}
       >
-        {works.map((work, i) => (
-          <WorkPiece
-            key={work.id}
-            work={work}
-            index={i}
-            onOpen={(id: SectionId) => navigate(`/${id}`)}
-          />
-        ))}
+        {ready
+          ? works.map((work, i) => (
+              <WorkPiece
+                key={work.id}
+                work={work}
+                index={i}
+                onOpen={(id: SectionId) => navigate(`/${id}`)}
+              />
+            ))
+          : null}
       </div>
 
       <div className="hero__overlay">

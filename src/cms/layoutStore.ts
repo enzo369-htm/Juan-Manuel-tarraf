@@ -2,7 +2,7 @@ import { sections, type SectionId } from '../data/sections'
 import { clampPiece, defaultLayout } from './defaults'
 import type { HeroLayout, LayoutRepository } from './types'
 
-export const LAYOUT_STORAGE_KEY = 'jt.hero-layout.v1'
+export const LAYOUT_STORAGE_KEY = 'jt.hero-layout.v2'
 export const LAYOUT_EVENT = 'jt:hero-layout'
 
 function isSectionId(id: string): id is SectionId {
@@ -28,7 +28,10 @@ function parseLayout(raw: string | null): HeroLayout | null {
       const section = sections.find((s) => s.id === id)!
       const width =
         typeof pos.width === 'number' && Number.isFinite(pos.width) ? pos.width : section.width
-      positions[id] = clampPiece(id, pos.x, pos.y, width)
+      positions[id] = {
+        ...clampPiece(id, pos.x, pos.y, width),
+        ...(typeof pos.src === 'string' && pos.src ? { src: pos.src } : {}),
+      }
     }
 
     return {
@@ -41,13 +44,29 @@ function parseLayout(raw: string | null): HeroLayout | null {
   }
 }
 
+export function readCachedLayout(): HeroLayout | null {
+  try {
+    return parseLayout(localStorage.getItem(LAYOUT_STORAGE_KEY))
+  } catch {
+    return null
+  }
+}
+
+export function writeCachedLayout(layout: HeroLayout) {
+  try {
+    localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(layout))
+  } catch {
+    /* quota / private mode */
+  }
+}
+
 /**
  * Local persistence. Swap this module's export for a Neon repository later
  * without touching the admin UI.
  */
 export const layoutRepository: LayoutRepository = {
   async load() {
-    return parseLayout(localStorage.getItem(LAYOUT_STORAGE_KEY)) ?? defaultLayout()
+    return readCachedLayout() ?? defaultLayout()
   },
 
   async save(layout) {
@@ -56,7 +75,7 @@ export const layoutRepository: LayoutRepository = {
       updatedAt: new Date().toISOString(),
       positions: layout.positions,
     }
-    localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(next))
+    writeCachedLayout(next)
     return next
   },
 }
