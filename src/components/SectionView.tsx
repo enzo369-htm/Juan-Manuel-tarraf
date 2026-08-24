@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { CanvasViewer } from '../canvas/CanvasViewer'
 import { apiGetCopy, apiGetPlacements, type SectionCanvas } from '../cms/api'
 import type { Section } from '../data/sections'
+import { SiteNav } from './SiteNav'
 
 const CANVAS_SECTIONS = new Set(['trabajos', 'exposiciones', 'archivos'])
 
@@ -11,7 +11,6 @@ type Props = {
 }
 
 export function SectionView({ section }: Props) {
-  const navigate = useNavigate()
   const [body, setBody] = useState('')
   const [portraitUrl, setPortraitUrl] = useState('')
   const [canvases, setCanvases] = useState<SectionCanvas[]>([])
@@ -63,16 +62,8 @@ export function SectionView({ section }: Props) {
   const isBio = section.id === 'bio'
 
   return (
-    <section className="section-view" aria-labelledby="section-title">
-      <header className="section-view__bar">
-        <button type="button" className="section-view__back" onClick={() => navigate('/')}>
-          Volver
-        </button>
-        <h1 id="section-title" className="section-view__title">
-          {section.label}
-        </h1>
-        <span className="section-view__spacer" aria-hidden />
-      </header>
+    <section className="section-view" aria-label={section.label}>
+      <SiteNav />
 
       {!ready ? null : isBio ? (
         <div className="bio">

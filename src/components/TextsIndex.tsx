@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { apiListTexts, type TextEntry } from '../cms/api'
+import { SiteNav } from './SiteNav'
 
 function formatDate(value: string) {
   return value.slice(0, 10)
 }
 
 export function TextsIndex() {
-  const navigate = useNavigate()
   const [texts, setTexts] = useState<TextEntry[]>([])
   const [error, setError] = useState('')
   const [ready, setReady] = useState(false)
@@ -32,16 +32,8 @@ export function TextsIndex() {
   }, [])
 
   return (
-    <section className="section-view" aria-labelledby="section-title">
-      <header className="section-view__bar">
-        <button type="button" className="section-view__back" onClick={() => navigate('/')}>
-          Volver
-        </button>
-        <h1 id="section-title" className="section-view__title">
-          Textos
-        </h1>
-        <span className="section-view__spacer" aria-hidden />
-      </header>
+    <section className="section-view" aria-label="Textos">
+      <SiteNav />
 
       <div className="texts-index">
         <p className="texts-index__kicker">textos</p>
