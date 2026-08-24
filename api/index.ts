@@ -1,23 +1,14 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node'
+export const runtime = 'nodejs'
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  try {
-    const raw = req.query.path
-    const fromQuery = Array.isArray(raw)
-      ? raw.filter(Boolean).join('/')
-      : (raw ?? '')
-    const incoming = (req.url ?? '').split('?')[0] ?? ''
-    const suffix = fromQuery || incoming.replace(/^\/api\/?/, '')
-    req.url = suffix ? `/api/${suffix}` : '/api'
+export function GET() {
+  return Response.json({ ok: true, service: 'juan-tarraf-api' })
+}
 
-    const { handleApi } = await import('../server/handlers')
-    await handleApi(req, res)
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Error de servidor'
-    if (!res.headersSent) {
-      res.statusCode = 500
-      res.setHeader('Content-Type', 'application/json; charset=utf-8')
-      res.end(JSON.stringify({ error: message }))
-    }
-  }
+export default function handler(
+  _req: unknown,
+  res: { statusCode: number; setHeader: (name: string, value: string) => void; end: (body: string) => void },
+) {
+  res.statusCode = 200
+  res.setHeader('Content-Type', 'application/json; charset=utf-8')
+  res.end(JSON.stringify({ ok: true, service: 'juan-tarraf-api' }))
 }

@@ -61,8 +61,7 @@ export async function readBody(req: ApiRequest): Promise<Buffer> {
   })
 }
 
-export function parseCookies(req: ApiRequest) {
-  const header = req.headers.cookie ?? ''
+export function parseCookieString(header: string) {
   const out: Record<string, string> = {}
   for (const part of header.split(';')) {
     const [name, ...rest] = part.trim().split('=')
@@ -70,6 +69,10 @@ export function parseCookies(req: ApiRequest) {
     out[name] = decodeURIComponent(rest.join('='))
   }
   return out
+}
+
+export function parseCookies(req: ApiRequest) {
+  return parseCookieString(req.headers.cookie ?? '')
 }
 
 function secret() {
