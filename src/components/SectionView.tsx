@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { CanvasViewer } from '../canvas/CanvasViewer'
 import { apiGetCopy, apiGetPlacements, type CanvasPiece } from '../cms/api'
 import type { Section } from '../data/sections'
 
@@ -11,13 +12,17 @@ export function SectionView({ section }: Props) {
   const navigate = useNavigate()
   const [body, setBody] = useState('')
   const [pieces, setPieces] = useState<CanvasPiece[]>([])
+  const [heightRatio, setHeightRatio] = useState(1.2)
 
   useEffect(() => {
     void apiGetCopy(section.id)
       .then((data) => setBody(data.body))
       .catch(() => setBody(''))
     void apiGetPlacements(section.id)
-      .then((data) => setPieces(data.pieces))
+      .then((data) => {
+        setPieces(data.pieces)
+        setHeightRatio(data.heightRatio ?? 1.2)
+      })
       .catch(() => setPieces([]))
   }, [section.id])
 
@@ -36,16 +41,16 @@ export function SectionView({ section }: Props) {
       <div className="section-view__body">
         {body && <div className="section-view__copy">{body}</div>}
         {pieces.length > 0 && (
-          <div className="section-view__canvas">
-            {pieces.map((piece) => (
-              <img
-                key={piece.id}
-                src={piece.src}
-                alt=""
-                style={{ left: piece.x, top: piece.y, width: piece.width }}
-              />
-            ))}
-          </div>
+          <CanvasViewer
+            heightRatio={heightRatio}
+            items={pieces.map((piece) => ({
+              id: piece.id,
+              imageUrl: piece.src,
+              x: piece.x,
+              y: piece.y,
+              width: piece.width,
+            }))}
+          />
         )}
         {!body && pieces.length === 0 && (
           <p className="section-view__note">

@@ -10,6 +10,7 @@ type Props = {
 export function AdminSectionCanvas({ slug }: Props) {
   const section = getSection(slug)
   const [pieces, setPieces] = useState<CanvasPiece[]>([])
+  const [heightRatio, setHeightRatio] = useState(1.2)
   const [status, setStatus] = useState('Listo')
   const saveTimer = useRef<number>(0)
 
@@ -17,6 +18,7 @@ export function AdminSectionCanvas({ slug }: Props) {
     try {
       const data = await apiGetPlacements(slug)
       setPieces(data.pieces)
+      setHeightRatio(data.heightRatio ?? 1.2)
     } catch {
       setPieces([])
     }
@@ -26,22 +28,31 @@ export function AdminSectionCanvas({ slug }: Props) {
     void refresh()
   }, [refresh])
 
-  const persist = async (next: CanvasPiece[]) => {
+  const persist = async (next: CanvasPiece[], ratio: number) => {
     setStatus('Guardando…')
     try {
-      await apiSavePlacements(slug, next)
+      await apiSavePlacements(slug, next, ratio)
       setStatus('Guardado')
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Error')
     }
   }
 
-  const onChange = (next: CanvasPiece[]) => {
-    setPieces(next)
+  const scheduleSave = (next: CanvasPiece[], ratio: number) => {
     window.clearTimeout(saveTimer.current)
     saveTimer.current = window.setTimeout(() => {
-      void persist(next)
+      void persist(next, ratio)
     }, 450)
+  }
+
+  const onChange = (next: CanvasPiece[]) => {
+    setPieces(next)
+    scheduleSave(next, heightRatio)
+  }
+
+  const onHeightRatioChange = (ratio: number) => {
+    setHeightRatio(ratio)
+    scheduleSave(pieces, ratio)
   }
 
   const onUpload = async (file: File) => {
@@ -79,7 +90,12 @@ export function AdminSectionCanvas({ slug }: Props) {
           </label>
         </div>
       </header>
-      <FreeCanvas pieces={pieces} onChange={onChange} />
+      <FreeCanvas
+        pieces={pieces}
+        onChange={onChange}
+        heightRatio={heightRatio}
+        onHeightRatioChange={onHeightRatioChange}
+      />
     </section>
   )
 }

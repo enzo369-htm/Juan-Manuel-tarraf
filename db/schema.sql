@@ -4,7 +4,8 @@ create table if not exists sections (
   slug text primary key,
   title text not null,
   kind text not null check (kind in ('canvas', 'text')),
-  sort_order int not null default 0
+  sort_order int not null default 0,
+  height_ratio double precision not null default 1.2
 );
 
 create table if not exists media (
@@ -30,9 +31,9 @@ create table if not exists placements (
   id uuid primary key default gen_random_uuid(),
   section_slug text not null references sections (slug) on delete cascade,
   media_id uuid not null references media (id) on delete cascade,
-  x int not null default 40,
-  y int not null default 40,
-  width int not null default 280,
+  x double precision not null default 8,
+  y double precision not null default 8,
+  width double precision not null default 24,
   z_index int not null default 0,
   created_at timestamptz not null default now()
 );

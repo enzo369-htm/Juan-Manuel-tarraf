@@ -162,10 +162,20 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
     const placeMatch = path.match(/^\/api\/placements\/([a-z]+)$/)
     if (placeMatch && method === 'GET') {
       if (!hasDatabase()) {
-        sendJson(res, 200, { pieces: [] })
+        sendJson(res, 200, { pieces: [], heightRatio: 1.2 })
         return
       }
-      const rows = (await sql()`
+      const db = sql()
+      let heightRatio = 1.2
+      try {
+        const ratioRows = (await db`
+          select height_ratio from sections where slug = ${placeMatch[1]}
+        `) as { height_ratio: number }[]
+        heightRatio = ratioRows[0]?.height_ratio ?? 1.2
+      } catch {
+        heightRatio = 1.2
+      }
+      const rows = (await db`
         select p.id, p.x, p.y, p.width, p.z_index, m.url
         from placements p
         join media m on m.id = p.media_id
@@ -173,14 +183,20 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         order by p.z_index, p.created_at
       `) as { id: string; x: number; y: number; width: number; z_index: number; url: string }[]
       sendJson(res, 200, {
-        pieces: rows.map((row) => ({
-          id: row.id,
-          src: row.url,
-          x: row.x,
-          y: row.y,
-          width: row.width,
-          z: row.z_index,
-        })),
+        heightRatio,
+        pieces: rows.map((row, i) => {
+          const legacy = row.width > 90
+          const col = i % 2
+          const rowI = Math.floor(i / 2)
+          return {
+            id: row.id,
+            src: row.url,
+            x: legacy ? (col === 0 ? 8 : 58) : row.x,
+            y: legacy ? 4 + (rowI % 6) * 14 : row.y,
+            width: legacy ? 24 : row.width,
+            z: row.z_index,
+          }
+        }),
       })
       return
     }
@@ -193,14 +209,25 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
       }
       const body = await readJson<{
         pieces: { id: string; x: number; y: number; width: number }[]
+        heightRatio?: number
       }>(req)
       const db = sql()
+      if (typeof body.heightRatio === 'number' && Number.isFinite(body.heightRatio)) {
+        const ratio = Math.min(2.5, Math.max(0.6, body.heightRatio))
+        try {
+          await db`
+            update sections set height_ratio = ${ratio} where slug = ${placeMatch[1]}
+          `
+        } catch {
+          /* height_ratio still missing until db/003 is applied */
+        }
+      }
       for (const piece of body.pieces ?? []) {
         await db`
           update placements
-          set x = ${Math.round(piece.x)},
-              y = ${Math.round(piece.y)},
-              width = ${Math.round(piece.width)}
+          set x = ${piece.x},
+              y = ${piece.y},
+              width = ${piece.width}
           where id = ${piece.id} and section_slug = ${placeMatch[1]}
         `
       }
@@ -243,7 +270,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
       if (section) {
         const placed = (await db`
           insert into placements (section_slug, media_id, x, y, width, z_index)
-          values (${section}, ${id}, 80, 80, 280, 0)
+          values (${section}, ${id}, 8, 8, 24, 0)
           returning id
         `) as { id: string }[]
         placementId = placed[0]?.id ?? null

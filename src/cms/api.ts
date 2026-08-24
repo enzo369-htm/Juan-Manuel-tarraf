@@ -72,13 +72,17 @@ export type CanvasPiece = {
 }
 
 export async function apiGetPlacements(slug: string) {
-  return request<{ pieces: CanvasPiece[] }>(`/api/placements/${slug}`)
+  return request<{ pieces: CanvasPiece[]; heightRatio: number }>(`/api/placements/${slug}`)
 }
 
-export async function apiSavePlacements(slug: string, pieces: CanvasPiece[]) {
+export async function apiSavePlacements(
+  slug: string,
+  pieces: CanvasPiece[],
+  heightRatio?: number,
+) {
   return request<{ ok: boolean }>(`/api/placements/${slug}`, {
     method: 'PUT',
-    body: JSON.stringify({ pieces }),
+    body: JSON.stringify({ pieces, heightRatio }),
   })
 }
 

@@ -280,16 +280,6 @@ body,
   line-height: 1.65;
 }
 
-.section-view__canvas {
-  position: relative;
-  min-height: 68vh;
-}
-
-.section-view__canvas img {
-  position: absolute;
-  height: auto;
-}
-
 .section-view__note {
   margin: auto;
   max-width: 28rem;
