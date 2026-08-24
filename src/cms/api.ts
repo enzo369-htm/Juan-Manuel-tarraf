@@ -10,7 +10,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...init?.headers,
     },
   })
-  const data = (await res.json().catch(() => ({}))) as T & { error?: string }
+  const raw = await res.text()
+  let data: T & { error?: string } = {} as T & { error?: string }
+  try {
+    data = raw ? (JSON.parse(raw) as T & { error?: string }) : data
+  } catch {
+    throw new Error(raw.slice(0, 180) || `Error ${res.status}`)
+  }
   if (!res.ok) {
     throw new Error(data.error || `Error ${res.status}`)
   }

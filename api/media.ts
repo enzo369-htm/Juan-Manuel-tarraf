@@ -111,11 +111,16 @@ export default {
         placementId = placed[0]?.id ?? null
       }
 
+      const publicBase = (process.env.R2_PUBLIC_BASE_URL || '').replace(/\/$/, '')
       return Response.json({
         id,
         url,
         placementId,
-        warning: hasR2() ? undefined : 'R2 no configurado',
+        warning: !hasR2()
+          ? 'R2 no configurado'
+          : publicBase
+            ? undefined
+            : 'Falta R2_PUBLIC_BASE_URL: se subió el archivo pero la URL no es pública',
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Error de servidor'

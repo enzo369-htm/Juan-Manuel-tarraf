@@ -15,17 +15,15 @@ export function AdminSectionCanvas({ slug }: Props) {
   const saveTimer = useRef<number>(0)
 
   const refresh = useCallback(async () => {
-    try {
-      const data = await apiGetPlacements(slug)
-      setPieces(data.pieces)
-      setHeightRatio(data.heightRatio ?? 1.2)
-    } catch {
-      setPieces([])
-    }
+    const data = await apiGetPlacements(slug)
+    setPieces(data.pieces)
+    setHeightRatio(data.heightRatio ?? 1.2)
   }, [slug])
 
   useEffect(() => {
-    void refresh()
+    void refresh().catch((error) => {
+      setStatus(error instanceof Error ? error.message : 'Error al cargar')
+    })
   }, [refresh])
 
   const persist = async (next: CanvasPiece[], ratio: number) => {
@@ -58,9 +56,20 @@ export function AdminSectionCanvas({ slug }: Props) {
   const onUpload = async (file: File) => {
     setStatus('Subiendo…')
     try {
-      await apiUploadMedia(file, slug)
-      await refresh()
-      setStatus('Imagen cargada')
+      const uploaded = await apiUploadMedia(file, slug)
+      if (uploaded.placementId && uploaded.url) {
+        setPieces((prev) => [
+          ...prev,
+          { id: uploaded.placementId as string, src: uploaded.url as string, x: 8, y: 8, width: 24 },
+        ])
+      }
+      try {
+        await refresh()
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : 'Error al cargar el lienzo')
+        return
+      }
+      setStatus(uploaded.warning || 'Imagen cargada')
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Error al subir')
     }
