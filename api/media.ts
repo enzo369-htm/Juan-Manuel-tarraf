@@ -32,6 +32,26 @@ async function isAuthed(request: Request) {
   return (await hmacHex(secret, payload)) === sig && Number(payload) > Date.now()
 }
 
+function sniffImage(body: Uint8Array) {
+  if (body.length < 12) return null
+  if (body[0] === 0xff && body[1] === 0xd8) return 'image/jpeg'
+  if (body[0] === 0x89 && body[1] === 0x50 && body[2] === 0x4e && body[3] === 0x47) return 'image/png'
+  if (body[0] === 0x47 && body[1] === 0x49 && body[2] === 0x46) return 'image/gif'
+  if (
+    body[0] === 0x52 &&
+    body[1] === 0x49 &&
+    body[2] === 0x46 &&
+    body[3] === 0x46 &&
+    body[8] === 0x57 &&
+    body[9] === 0x45 &&
+    body[10] === 0x42 &&
+    body[11] === 0x50
+  ) {
+    return 'image/webp'
+  }
+  return null
+}
+
 function hasR2() {
   return Boolean(
     process.env.R2_ACCOUNT_ID &&
@@ -57,11 +77,21 @@ export default {
       }
 
       const filename = request.headers.get('x-filename') || `obra-${Date.now()}.jpg`
-      const mime = request.headers.get('content-type') || 'application/octet-stream'
       const section = request.headers.get('x-section') || ''
+      const allowedSections = new Set(['trabajos', 'exposiciones', 'archivos'])
+      if (section && !allowedSections.has(section)) {
+        return Response.json({ error: 'Sección inválida' }, { status: 400 })
+      }
       const body = new Uint8Array(await request.arrayBuffer())
       if (!body.length) {
         return Response.json({ error: 'Archivo vacío' }, { status: 400 })
+      }
+      if (body.length > 12 * 1024 * 1024) {
+        return Response.json({ error: 'La imagen es demasiado grande' }, { status: 413 })
+      }
+      const mime = sniffImage(body)
+      if (!mime) {
+        return Response.json({ error: 'Solo se aceptan JPEG, PNG, WebP o GIF' }, { status: 400 })
       }
 
       const id = crypto.randomUUID()
@@ -141,8 +171,8 @@ export default {
             : 'Falta R2_PUBLIC_BASE_URL: se subió el archivo pero la URL no es pública',
       })
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Error de servidor'
-      return Response.json({ error: message }, { status: 500 })
+      console.error(error)
+      return Response.json({ error: 'Error de servidor' }, { status: 500 })
     }
   },
 }

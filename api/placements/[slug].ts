@@ -61,9 +61,14 @@ type CanvasRow = {
   height_ratio: number
 }
 
+function clampPct(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return min
+  return Math.min(max, Math.max(min, value))
+}
+
 function toPieces(rows: PlaceRow[]) {
   return rows.map((row, i) => {
-    const legacy = row.width > 90
+    const legacy = row.width > 100
     const col = i % 2
     const rowI = Math.floor(i / 2)
     return {
@@ -78,16 +83,29 @@ function toPieces(rows: PlaceRow[]) {
   })
 }
 
-async function loadCanvases(
+async function readCanvases(
   sql: (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown>,
   slug: string,
 ) {
-  let canvasRows = (await sql`
-    select id, sort_order, height_ratio
-    from section_canvases
-    where section_slug = ${slug}
-    order by sort_order
-  `) as CanvasRow[]
+  let canvasRows: CanvasRow[] = []
+  try {
+    canvasRows = (await sql`
+      select id, sort_order, height_ratio
+      from section_canvases
+      where section_slug = ${slug}
+      order by sort_order
+    `) as CanvasRow[]
+  } catch {
+    canvasRows = []
+  }
+
+  const placeRows = (await sql`
+    select p.id, p.canvas_id, p.media_id, p.x, p.y, p.width, p.z_index, m.url
+    from placements p
+    join media m on m.id = p.media_id
+    where p.section_slug = ${slug}
+    order by p.z_index, p.created_at
+  `) as PlaceRow[]
 
   if (canvasRows.length === 0) {
     let heightRatio = 1.2
@@ -99,39 +117,23 @@ async function loadCanvases(
     } catch {
       heightRatio = 1.2
     }
-    await sql`
-      insert into section_canvases (section_slug, sort_order, height_ratio)
-      values (${slug}, 0, ${heightRatio})
-    `
-    canvasRows = (await sql`
-      select id, sort_order, height_ratio
-      from section_canvases
-      where section_slug = ${slug}
-      order by sort_order
-    `) as CanvasRow[]
+    return [
+      {
+        id: 'legacy',
+        heightRatio,
+        pieces: toPieces(placeRows),
+      },
+    ]
   }
 
-  const firstId = canvasRows[0]?.id
-  if (firstId) {
-    await sql`
-      update placements
-      set canvas_id = ${firstId}
-      where section_slug = ${slug} and canvas_id is null
-    `
-  }
-
-  const placeRows = (await sql`
-    select p.id, p.canvas_id, p.media_id, p.x, p.y, p.width, p.z_index, m.url
-    from placements p
-    join media m on m.id = p.media_id
-    where p.section_slug = ${slug}
-    order by p.z_index, p.created_at
-  `) as PlaceRow[]
-
-  return canvasRows.map((canvas) => ({
+  return canvasRows.map((canvas, index) => ({
     id: canvas.id,
     heightRatio: canvas.height_ratio ?? 1.2,
-    pieces: toPieces(placeRows.filter((row) => row.canvas_id === canvas.id)),
+    pieces: toPieces(
+      placeRows.filter(
+        (row) => row.canvas_id === canvas.id || (index === 0 && !row.canvas_id),
+      ),
+    ),
   }))
 }
 
@@ -159,28 +161,12 @@ export default {
       const sql = neon(dbUrl)
 
       if (request.method === 'GET') {
-        try {
-          const canvases = await loadCanvases(sql, slug)
-          return Response.json({
-            canvases,
-            pieces: canvases[0]?.pieces ?? [],
-            heightRatio: canvases[0]?.heightRatio ?? 1.2,
-          })
-        } catch {
-          const rows = (await sql`
-            select p.id, p.media_id, p.x, p.y, p.width, p.z_index, m.url
-            from placements p
-            join media m on m.id = p.media_id
-            where p.section_slug = ${slug}
-            order by p.z_index, p.created_at
-          `) as PlaceRow[]
-          const pieces = toPieces(rows)
-          return Response.json({
-            canvases: [{ id: 'legacy', heightRatio: 1.2, pieces }],
-            pieces,
-            heightRatio: 1.2,
-          })
-        }
+        const canvases = await readCanvases(sql, slug)
+        return Response.json({
+          canvases,
+          pieces: canvases[0]?.pieces ?? [],
+          heightRatio: canvases[0]?.heightRatio ?? 1.2,
+        })
       }
 
       if (!(await isAuthed(request))) {
@@ -262,7 +248,7 @@ export default {
                 },
               ]
 
-        const saved = await loadCanvases(sql, slug)
+        const saved = await readCanvases(sql, slug)
         for (let i = 0; i < canvases.length; i++) {
           const canvas = canvases[i]
           const ratio =
@@ -286,38 +272,43 @@ export default {
             set height_ratio = ${ratio}, sort_order = ${i}
             where id = ${canvasId} and section_slug = ${slug}
           `
-          const keepIds = (canvas.pieces ?? []).map((piece) => piece.id).filter(isUuid)
-          if (keepIds.length === 0) {
-            await sql`delete from placements where canvas_id = ${canvasId} and section_slug = ${slug}`
-          } else {
-            await sql`
-              delete from placements
-              where canvas_id = ${canvasId}
-                and section_slug = ${slug}
-                and not (id = any(${keepIds}))
-            `
-          }
-          for (const piece of canvas.pieces ?? []) {
-            if (isUuid(piece.id)) {
+          if (Array.isArray(canvas.pieces)) {
+            const keepIds = canvas.pieces.map((piece) => piece.id).filter(isUuid)
+            if (keepIds.length === 0) {
+              await sql`delete from placements where canvas_id = ${canvasId} and section_slug = ${slug}`
+            } else {
               await sql`
-                update placements
-                set x = ${piece.x},
-                    y = ${piece.y},
-                    width = ${piece.width},
-                    canvas_id = ${canvasId}
-                where id = ${piece.id} and section_slug = ${slug}
+                delete from placements
+                where canvas_id = ${canvasId}
+                  and section_slug = ${slug}
+                  and not (id = any(${keepIds}))
               `
-              continue
             }
-            if (piece.mediaId && isUuid(piece.mediaId)) {
-              await sql`
-                insert into placements (section_slug, media_id, canvas_id, x, y, width, z_index)
-                values (${slug}, ${piece.mediaId}, ${canvasId}, ${piece.x}, ${piece.y}, ${piece.width}, 0)
-              `
+            for (const piece of canvas.pieces) {
+              const x = clampPct(piece.x, 0, 95)
+              const y = clampPct(piece.y, 0, 98)
+              const width = clampPct(piece.width, 5, 90)
+              if (isUuid(piece.id)) {
+                await sql`
+                  update placements
+                  set x = ${x},
+                      y = ${y},
+                      width = ${width},
+                      canvas_id = ${canvasId}
+                  where id = ${piece.id} and section_slug = ${slug}
+                `
+                continue
+              }
+              if (piece.mediaId && isUuid(piece.mediaId)) {
+                await sql`
+                  insert into placements (section_slug, media_id, canvas_id, x, y, width, z_index)
+                  values (${slug}, ${piece.mediaId}, ${canvasId}, ${x}, ${y}, ${width}, 0)
+                `
+              }
             }
           }
         }
-        const canvasesOut = await loadCanvases(sql, slug)
+        const canvasesOut = await readCanvases(sql, slug)
         return Response.json({
           ok: true,
           canvases: canvasesOut,
@@ -328,8 +319,8 @@ export default {
 
       return Response.json({ error: 'Method not allowed' }, { status: 405 })
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Error de servidor'
-      return Response.json({ error: message }, { status: 500 })
+      console.error(error)
+      return Response.json({ error: 'Error de servidor' }, { status: 500 })
     }
   },
 }

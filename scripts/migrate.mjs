@@ -30,15 +30,19 @@ if (!url) {
 }
 
 const sql = neon(url)
-const schema = readFileSync(new URL('../db/schema.sql', import.meta.url), 'utf8')
-const statements = schema
-  .split(/;\s*\n/)
-  .map((part) => part.trim())
-  .filter((part) => part.length > 0)
+const files = ['schema.sql', '003_free_canvas_percent.sql', '004_section_canvases.sql']
 
-for (const statement of statements) {
-  await sql.query(statement)
-  console.log('ok:', statement.slice(0, 60).replace(/\s+/g, ' '))
+for (const file of files) {
+  const schema = readFileSync(new URL(`../db/${file}`, import.meta.url), 'utf8')
+  const statements = schema
+    .split(/;\s*\n/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0 && !part.startsWith('--'))
+
+  for (const statement of statements) {
+    await sql.query(statement)
+    console.log('ok:', file, statement.slice(0, 50).replace(/\s+/g, ' '))
+  }
 }
 
 console.log('Schema aplicado.')
