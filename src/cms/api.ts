@@ -87,15 +87,17 @@ export async function apiSavePlacements(
 }
 
 export async function apiUploadMedia(file: File, section?: string) {
+  const { downscaleImage } = await import('./downscaleImage')
+  const payload = await downscaleImage(file)
   const res = await fetch('/api/media', {
     method: 'POST',
     credentials: 'include',
     headers: {
-      'Content-Type': file.type || 'application/octet-stream',
-      'x-filename': file.name,
+      'Content-Type': payload.type || 'application/octet-stream',
+      'x-filename': payload.name,
       ...(section ? { 'x-section': section } : {}),
     },
-    body: file,
+    body: payload,
   })
   const data = (await res.json()) as {
     id?: string
