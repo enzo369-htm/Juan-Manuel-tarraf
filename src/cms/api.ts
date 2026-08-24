@@ -98,7 +98,7 @@ export async function apiGetPlacements(slug: string) {
 }
 
 export async function apiSavePlacements(slug: string, canvases: SectionCanvas[]) {
-  return request<{ ok: boolean }>(`/api/placements/${slug}`, {
+  return request<{ ok: boolean; canvases?: SectionCanvas[] }>(`/api/placements/${slug}`, {
     method: 'PUT',
     body: JSON.stringify({ canvases }),
   })

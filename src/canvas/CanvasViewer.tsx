@@ -8,6 +8,7 @@ export type CanvasViewerProps = {
   renderCaption?: (item: CanvasItem) => ReactNode
 }
 
+/** Same free-canvas board as the admin: % positions, height = width × ratio. */
 export function CanvasViewer({ items, heightRatio, renderCaption }: CanvasViewerProps) {
   const positioned = withDefaultPositions(items)
   const ratio = heightRatio ?? 1.2
@@ -16,11 +17,6 @@ export function CanvasViewer({ items, heightRatio, renderCaption }: CanvasViewer
 
   return (
     <div className="studio-viewer">
-      <div className="studio-viewer__mobile">
-        {positioned.map((item) => (
-          <StackedItem key={item.id} item={item} renderCaption={renderCaption} />
-        ))}
-      </div>
       <div className="studio-viewer__desktop" style={{ paddingTop: `${ratio * 100}%` }}>
         {positioned.map((item) => (
           <DesktopItem key={item.id} item={item} renderCaption={renderCaption} />
@@ -54,22 +50,6 @@ function DesktopItem({
     >
       <img src={item.imageUrl} alt={item.label || ''} />
       {caption && hovered && <div className="studio-viewer__caption">{caption}</div>}
-    </div>
-  )
-}
-
-function StackedItem({
-  item,
-  renderCaption,
-}: {
-  item: CanvasItem
-  renderCaption?: (item: CanvasItem) => ReactNode
-}) {
-  const caption = renderCaption?.(item)
-  return (
-    <div className="studio-viewer__stack">
-      <img src={item.imageUrl} alt={item.label || ''} />
-      {caption && <div className="studio-viewer__caption">{caption}</div>}
     </div>
   )
 }

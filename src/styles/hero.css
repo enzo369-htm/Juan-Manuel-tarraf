@@ -236,6 +236,7 @@ html.page-scroll #root {
   color: var(--ink);
   display: flex;
   flex-direction: column;
+  overflow: visible;
 }
 
 .section-view__bar {
@@ -283,19 +284,21 @@ html.page-scroll #root {
   flex-direction: column;
   align-items: stretch;
   justify-content: flex-start;
-  gap: 3.2rem;
-  padding: 2.4rem 1.5rem 3rem;
+  gap: 0;
+  padding: 0 0 3rem;
 }
 
 .section-view__copy {
   max-width: 40rem;
   margin: 0 auto;
+  padding: 2.4rem 1.5rem 0;
   white-space: pre-wrap;
   line-height: 1.65;
 }
 
 .section-view__note {
   margin: auto;
+  padding: 2.4rem 1.5rem;
   max-width: 28rem;
   text-align: center;
   font-family: var(--font-display);

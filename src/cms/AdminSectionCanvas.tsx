@@ -50,7 +50,8 @@ export function AdminSectionCanvas({ slug }: Props) {
     setSaving(true)
     setStatus('Guardando…')
     try {
-      await apiSavePlacements(slug, canvases)
+      const saved = await apiSavePlacements(slug, canvases)
+      if (saved.canvases?.length) setCanvases(saved.canvases)
       setDirty(false)
       setStatus('Guardado')
     } catch (error) {

@@ -262,25 +262,37 @@ export default {
                 },
               ]
 
+        const saved = await loadCanvases(sql, slug)
         for (let i = 0; i < canvases.length; i++) {
           const canvas = canvases[i]
-          if (!isUuid(canvas.id)) continue
           const ratio =
             typeof canvas.heightRatio === 'number' && Number.isFinite(canvas.heightRatio)
               ? Math.min(2.5, Math.max(0.6, canvas.heightRatio))
               : 1.2
+          let canvasId = isUuid(canvas.id) ? canvas.id : saved[i]?.id
+          if (!canvasId) {
+            const created = (await sql`
+              insert into section_canvases (section_slug, sort_order, height_ratio)
+              values (${slug}, ${i}, ${ratio})
+              returning id
+            `) as { id: string }[]
+            canvasId = created[0]?.id
+          }
+          if (!canvasId) {
+            return Response.json({ error: 'No se pudo guardar el lienzo' }, { status: 500 })
+          }
           await sql`
             update section_canvases
             set height_ratio = ${ratio}, sort_order = ${i}
-            where id = ${canvas.id} and section_slug = ${slug}
+            where id = ${canvasId} and section_slug = ${slug}
           `
           const keepIds = (canvas.pieces ?? []).map((piece) => piece.id).filter(isUuid)
           if (keepIds.length === 0) {
-            await sql`delete from placements where canvas_id = ${canvas.id} and section_slug = ${slug}`
+            await sql`delete from placements where canvas_id = ${canvasId} and section_slug = ${slug}`
           } else {
             await sql`
               delete from placements
-              where canvas_id = ${canvas.id}
+              where canvas_id = ${canvasId}
                 and section_slug = ${slug}
                 and not (id = any(${keepIds}))
             `
@@ -291,7 +303,8 @@ export default {
                 update placements
                 set x = ${piece.x},
                     y = ${piece.y},
-                    width = ${piece.width}
+                    width = ${piece.width},
+                    canvas_id = ${canvasId}
                 where id = ${piece.id} and section_slug = ${slug}
               `
               continue
@@ -299,12 +312,18 @@ export default {
             if (piece.mediaId && isUuid(piece.mediaId)) {
               await sql`
                 insert into placements (section_slug, media_id, canvas_id, x, y, width, z_index)
-                values (${slug}, ${piece.mediaId}, ${canvas.id}, ${piece.x}, ${piece.y}, ${piece.width}, 0)
+                values (${slug}, ${piece.mediaId}, ${canvasId}, ${piece.x}, ${piece.y}, ${piece.width}, 0)
               `
             }
           }
         }
-        return Response.json({ ok: true })
+        const canvasesOut = await loadCanvases(sql, slug)
+        return Response.json({
+          ok: true,
+          canvases: canvasesOut,
+          pieces: canvasesOut[0]?.pieces ?? [],
+          heightRatio: canvasesOut[0]?.heightRatio ?? 1.2,
+        })
       }
 
       return Response.json({ error: 'Method not allowed' }, { status: 405 })
