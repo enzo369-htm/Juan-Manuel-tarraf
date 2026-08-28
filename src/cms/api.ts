@@ -45,7 +45,10 @@ export async function apiGetHero(): Promise<HeroLayout> {
 export async function apiSaveHero(layout: HeroLayout): Promise<HeroLayout> {
   return request<HeroLayout>('/api/hero', {
     method: 'PUT',
-    body: JSON.stringify({ positions: layout.positions }),
+    body: JSON.stringify({
+      positions: layout.positions,
+      backgroundMediaId: layout.backgroundMediaId,
+    }),
   })
 }
 
@@ -152,9 +155,15 @@ export async function apiDeleteCanvas(slug: string, canvasId: string) {
   })
 }
 
-export async function apiUploadMedia(file: File, section?: string, canvasId?: string) {
-  const { downscaleImage } = await import('./downscaleImage')
-  const payload = await downscaleImage(file)
+type UploadedMedia = {
+  id?: string
+  url?: string
+  placementId?: string
+  error?: string
+  warning?: string
+}
+
+async function postMediaFile(payload: File, section?: string, canvasId?: string) {
   const res = await fetch('/api/media', {
     method: 'POST',
     credentials: 'include',
@@ -167,18 +176,29 @@ export async function apiUploadMedia(file: File, section?: string, canvasId?: st
     body: payload,
   })
   const raw = await res.text()
-  let data: {
-    id?: string
-    url?: string
-    placementId?: string
-    error?: string
-    warning?: string
-  } = {}
+  let data: UploadedMedia = {}
   try {
-    data = raw ? (JSON.parse(raw) as typeof data) : {}
+    data = raw ? (JSON.parse(raw) as UploadedMedia) : {}
   } catch {
     throw new Error(raw.slice(0, 180) || `Error ${res.status}`)
   }
   if (!res.ok) throw new Error(data.error || `Error ${res.status}`)
   return data
+}
+
+export async function apiUploadMedia(
+  file: File,
+  section?: string,
+  canvasId?: string,
+  opts?: { maxDim?: number; quality?: number },
+) {
+  const { downscaleImage } = await import('./downscaleImage')
+  const payload = await downscaleImage(file, opts?.maxDim ?? 2400, opts?.quality ?? 0.82)
+  return postMediaFile(payload, section, canvasId)
+}
+
+/** Hero gates and background: no x-section (must not create a series placement). */
+export async function apiUploadHeroMedia(file: File) {
+  const { prepareHeroImage } = await import('./downscaleImage')
+  return postMediaFile(await prepareHeroImage(file))
 }

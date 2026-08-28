@@ -31,6 +31,7 @@ function parseLayout(raw: string | null): HeroLayout | null {
       positions[id] = {
         ...clampPiece(id, pos.x, pos.y, width),
         ...(typeof pos.src === 'string' && pos.src ? { src: pos.src } : {}),
+        ...(typeof pos.mediaId === 'string' && pos.mediaId ? { mediaId: pos.mediaId } : {}),
       }
     }
 
@@ -38,6 +39,12 @@ function parseLayout(raw: string | null): HeroLayout | null {
       version: 1,
       updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : fallback.updatedAt,
       positions,
+      backgroundUrl:
+        typeof data.backgroundUrl === 'string' && data.backgroundUrl
+          ? data.backgroundUrl
+          : fallback.backgroundUrl,
+      backgroundMediaId:
+        typeof data.backgroundMediaId === 'string' ? data.backgroundMediaId : fallback.backgroundMediaId,
     }
   } catch {
     return null
@@ -74,6 +81,8 @@ export const layoutRepository: LayoutRepository = {
       version: 1,
       updatedAt: new Date().toISOString(),
       positions: layout.positions,
+      backgroundUrl: layout.backgroundUrl,
+      backgroundMediaId: layout.backgroundMediaId,
     }
     writeCachedLayout(next)
     return next

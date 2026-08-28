@@ -10,15 +10,17 @@ export function layoutToWorks(layout: HeroLayout): Work[] {
   return sections.map((section) => {
     const pos = layout.positions[section.id]
     const width = pos?.width ?? section.width
+    const aspect = section.height / section.width
     return {
       id: section.id,
       src: pos?.src ?? section.src,
       x: pos?.x ?? section.x,
       y: pos?.y ?? section.y,
       width,
-      height: Math.round(width * (section.height / section.width)),
+      height: Math.round(width * aspect),
       placeholder: section.placeholder,
       label: section.label,
+      mediaId: pos?.mediaId,
     }
   })
 }

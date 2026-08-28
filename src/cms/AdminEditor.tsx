@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { WorkPiece } from '../components/WorkPiece'
-import { WORLD, type SectionId } from '../data/sections'
+import { HERO_BG_FALLBACK, WORLD, type SectionId } from '../data/sections'
 import type { Work } from '../data/works'
 import { clampPiece } from './defaults'
+import { apiUploadHeroMedia } from './api'
 import { useAdminViewport } from './useAdminViewport'
 import { useHeroLayout, layoutToWorks } from './useHeroLayout'
 
@@ -16,8 +17,12 @@ type DragState = {
   moved: boolean
 }
 
+type UploadTarget = SectionId | 'background'
+
 function applyPiece(list: Work[], id: SectionId, x: number, y: number, width: number) {
-  const next = clampPiece(id, x, y, width)
+  const current = list.find((w) => w.id === id)
+  const aspect = current && current.width ? current.height / current.width : undefined
+  const next = clampPiece(id, x, y, width, aspect)
   return list.map((w) =>
     w.id === id
       ? {
@@ -25,7 +30,7 @@ function applyPiece(list: Work[], id: SectionId, x: number, y: number, width: nu
           x: next.x,
           y: next.y,
           width: next.width,
-          height: Math.round(next.width * (w.height / w.width)),
+          height: Math.round(next.width * (aspect && aspect > 0 ? aspect : w.height / w.width)),
         }
       : w,
   )
@@ -46,13 +51,17 @@ export function AdminEditor() {
   const [selectedId, setSelectedId] = useState<SectionId | null>(null)
   const [status, setStatus] = useState('Listo')
   const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState<UploadTarget | null>(null)
   const viewportRef = useRef<HTMLElement>(null)
   const worldRef = useRef<HTMLDivElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const fileTargetRef = useRef<UploadTarget | null>(null)
   const draftRef = useRef(draft)
   const dragRef = useRef<DragState | null>(null)
   draftRef.current = draft
 
   const { scale, screenToWorld, fit, zoomBy } = useAdminViewport(viewportRef, worldRef)
+  const backgroundUrl = layout.backgroundUrl || HERO_BG_FALLBACK
 
   useEffect(() => {
     if (!ready) return
@@ -61,14 +70,23 @@ export function AdminEditor() {
   }, [ready, layout.updatedAt, works])
 
   const persist = useCallback(
-    async (nextWorks: Work[]) => {
+    async (
+      nextWorks: Work[],
+      extra?: { backgroundMediaId?: string; backgroundUrl?: string },
+    ) => {
       const positions = Object.fromEntries(
-        nextWorks.map((w) => [w.id, { x: w.x, y: w.y, width: w.width }]),
+        nextWorks.map((w) => [w.id, { x: w.x, y: w.y, width: w.width, mediaId: w.mediaId }]),
       ) as typeof layout.positions
       setSaving(true)
       setStatus('Guardando…')
       try {
-        await save({ version: 1, updatedAt: layout.updatedAt, positions })
+        await save({
+          version: 1,
+          updatedAt: layout.updatedAt,
+          positions,
+          backgroundMediaId: extra?.backgroundMediaId ?? layout.backgroundMediaId,
+          backgroundUrl: extra?.backgroundUrl ?? layout.backgroundUrl,
+        })
         setStatus('Guardado')
       } catch (error) {
         setStatus(error instanceof Error ? error.message : 'Error')
@@ -76,8 +94,42 @@ export function AdminEditor() {
         setSaving(false)
       }
     },
-    [layout.updatedAt, save],
+    [layout, save],
   )
+
+  const pickFile = (target: UploadTarget) => {
+    fileTargetRef.current = target
+    fileRef.current?.click()
+  }
+
+  const onHeroFile = async (file: File) => {
+    const target = fileTargetRef.current
+    fileTargetRef.current = null
+    if (!target) return
+    setUploading(target)
+    setStatus('Subiendo…')
+    try {
+      const uploaded = await apiUploadHeroMedia(file)
+      if (!uploaded.id || !uploaded.url) throw new Error('La subida no devolvió URL')
+      if (target === 'background') {
+        await persist(draftRef.current, {
+          backgroundMediaId: uploaded.id,
+          backgroundUrl: uploaded.url,
+        })
+      } else {
+        const next = draftRef.current.map((w) =>
+          w.id === target ? { ...w, src: uploaded.url!, mediaId: uploaded.id } : w,
+        )
+        draftRef.current = next
+        setDraft(next)
+        await persist(next)
+      }
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Error')
+    } finally {
+      setUploading(null)
+    }
+  }
 
   const beginDrag = (
     kind: 'move' | 'resize',
@@ -152,6 +204,7 @@ export function AdminEditor() {
   }, [persist, screenToWorld])
 
   const selected = draft.find((w) => w.id === selectedId) ?? null
+  const busy = saving || uploading !== null
 
   const nudgeSize = (delta: number) => {
     if (!selected) return
@@ -180,7 +233,7 @@ export function AdminEditor() {
           <strong>Hero / grilla</strong>
         </div>
         <p className="admin-bar__hint">
-          Vista completa al entrar. Rueda: zoom. Fondo: pan. Obras: mover. Esquina: tamaño.
+          Imágenes a la izquierda. Rueda: zoom. Fondo: pan. Obras: mover. Esquina: tamaño.
         </p>
         <div className="admin-bar__actions">
           <span className={`admin-bar__status${status === 'Guardado' ? ' is-saved' : ''}`}>
@@ -220,7 +273,7 @@ export function AdminEditor() {
           <button
             type="button"
             className="admin-bar__btn admin-bar__btn--primary"
-            disabled={saving}
+            disabled={busy}
             onClick={() => void persist(draft)}
           >
             {saving ? 'Guardando…' : status === 'Guardado' ? 'Guardado' : 'Guardar'}
@@ -228,28 +281,94 @@ export function AdminEditor() {
         </div>
       </header>
 
-      <section ref={viewportRef} className="hero hero--admin" aria-label="Editor de grilla">
-        <div className="hero__atmosphere" aria-hidden />
-        <div
-          ref={worldRef}
-          className="hero__world admin-world"
-          style={{ width: WORLD.width, height: WORLD.height }}
-        >
-          <div className="admin-world__grid" aria-hidden />
-          {draft.map((work, i) => (
-            <WorkPiece
-              key={work.id}
-              work={work}
-              index={i}
-              variant="admin"
-              selected={selectedId === work.id}
-              onSelect={setSelectedId}
-              onDragStart={(id, event) => beginDrag('move', id, event)}
-              onResizeStart={(id, event) => beginDrag('resize', id, event)}
-            />
-          ))}
-        </div>
-      </section>
+      <div className="admin-hero-body">
+        <aside className="admin-hero-media" aria-label="Imágenes del hero">
+          <div>
+            <p className="admin-hero-media__title">Fondo</p>
+            <div className="admin-hero-media__bg">
+              <img src={backgroundUrl} alt="" />
+            </div>
+            <button
+              type="button"
+              className="admin-bar__btn admin-hero-media__action"
+              disabled={busy}
+              onClick={() => pickFile('background')}
+            >
+              {uploading === 'background' ? 'Subiendo…' : 'Cambiar fondo'}
+            </button>
+          </div>
+
+          <div>
+            <p className="admin-hero-media__title">Secciones</p>
+            <ul className="admin-hero-media__list">
+              {draft.map((work) => (
+                <li
+                  key={work.id}
+                  className={`admin-hero-media__row${selectedId === work.id ? ' is-selected' : ''}`}
+                >
+                  <button
+                    type="button"
+                    className="admin-hero-media__pick"
+                    onClick={() => setSelectedId(work.id)}
+                  >
+                    <span className="admin-hero-media__thumb">
+                      <img src={work.src} alt="" />
+                    </span>
+                    <span className="admin-hero-media__name">{work.label}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-bar__btn"
+                    disabled={busy}
+                    onClick={() => pickFile(work.id)}
+                  >
+                    {uploading === work.id ? 'Subiendo…' : 'Cambiar'}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </aside>
+
+        <section ref={viewportRef} className="hero hero--admin" aria-label="Editor de grilla">
+          <div className="hero__atmosphere" aria-hidden />
+          <div
+            ref={worldRef}
+            className="hero__world admin-world"
+            style={{
+              width: WORLD.width,
+              height: WORLD.height,
+              backgroundImage: `url("${backgroundUrl}")`,
+            }}
+          >
+            <div className="admin-world__grid" aria-hidden />
+            {draft.map((work, i) => (
+              <WorkPiece
+                key={`${work.id}-${work.src}`}
+                work={work}
+                index={i}
+                variant="admin"
+                selected={selectedId === work.id}
+                onSelect={setSelectedId}
+                onDragStart={(id, event) => beginDrag('move', id, event)}
+                onResizeStart={(id, event) => beginDrag('resize', id, event)}
+              />
+            ))}
+          </div>
+        </section>
+      </div>
+
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          e.target.value = ''
+          if (file) void onHeroFile(file)
+        }}
+      />
     </div>
   )
 }

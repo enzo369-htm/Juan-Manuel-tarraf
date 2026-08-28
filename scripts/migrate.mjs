@@ -39,6 +39,7 @@ const files = [
   '007_scale_hero.sql',
   '008_bio_portrait.sql',
   '009_section_blocks.sql',
+  '010_hero_background.sql',
 ]
 
 for (const file of files) {

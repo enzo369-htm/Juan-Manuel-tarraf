@@ -10,6 +10,7 @@ export type Work = {
   height: number
   placeholder: string
   label: string
+  mediaId?: string
 }
 
 export { WORLD }

@@ -1,4 +1,4 @@
-import { sections, WORLD, type SectionId } from '../data/sections'
+import { HERO_BG_FALLBACK, sections, WORLD, type SectionId } from '../data/sections'
 import type { HeroLayout, PiecePosition } from './types'
 
 export const MIN_PIECE_WIDTH = 120
@@ -15,6 +15,7 @@ export function defaultLayout(): HeroLayout {
     version: 1,
     updatedAt: new Date(0).toISOString(),
     positions: defaultPositions(),
+    backgroundUrl: HERO_BG_FALLBACK,
   }
 }
 
@@ -33,9 +34,10 @@ export function clampPiece(
   x: number,
   y: number,
   width: number,
+  aspect?: number,
 ): PiecePosition {
   const nextWidth = clampWidth(width)
-  const height = Math.round(nextWidth * aspectOf(id))
+  const height = Math.round(nextWidth * (aspect && aspect > 0 ? aspect : aspectOf(id)))
   return {
     x: Math.round(Math.min(WORLD.width - nextWidth, Math.max(0, x))),
     y: Math.round(Math.min(WORLD.height - height, Math.max(0, y))),

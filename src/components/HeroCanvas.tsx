@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useHeroLayout } from '../cms/useHeroLayout'
+import { HERO_BG_FALLBACK } from '../data/sections'
 import { WORLD, type SectionId } from '../data/works'
 import { useCameraController } from '../hooks/useCameraController'
 import { WorkPiece } from './WorkPiece'
 
 export function HeroCanvas() {
   const navigate = useNavigate()
-  const { works, ready } = useHeroLayout()
+  const { layout, works, ready } = useHeroLayout()
+  const backgroundUrl = layout.backgroundUrl || HERO_BG_FALLBACK
   const viewportRef = useRef<HTMLElement>(null)
   const worldRef = useRef<HTMLDivElement>(null)
   const [hintVisible, setHintVisible] = useState(true)
@@ -58,12 +60,13 @@ export function HeroCanvas() {
         style={{
           width: WORLD.width,
           height: WORLD.height,
+          backgroundImage: `url("${backgroundUrl}")`,
         }}
       >
         {ready
           ? works.map((work, i) => (
               <WorkPiece
-                key={work.id}
+                key={`${work.id}-${work.src}`}
                 work={work}
                 index={i}
                 onOpen={(id: SectionId) => navigate(`/${id}`)}

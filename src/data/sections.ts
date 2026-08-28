@@ -25,6 +25,8 @@ export const WORLD = {
   height: 2138,
 } as const
 
+export const HERO_BG_FALLBACK = '/works/img fondo hero.jpg'
+
 function sized(width: number, natW: number, natH: number) {
   return {
     width,

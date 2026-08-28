@@ -37,18 +37,34 @@ type HeroRow = {
   x: number
   y: number
   width: number
+  media_id: string | null
   url: string
   updated_at: string
 }
 
-function toHeroLayout(rows: HeroRow[]) {
-  const positions: Record<string, { x: number; y: number; width: number; src?: string }> = {}
+const BG_FALLBACK = '/works/img fondo hero.jpg'
+
+function toHeroLayout(
+  rows: HeroRow[],
+  backgroundUrl = BG_FALLBACK,
+  backgroundMediaId?: string,
+) {
+  const positions: Record<
+    string,
+    { x: number; y: number; width: number; src?: string; mediaId?: string }
+  > = {}
   let updatedAt = new Date(0).toISOString()
   for (const row of rows) {
-    positions[row.slug] = { x: row.x, y: row.y, width: row.width, src: row.url }
+    positions[row.slug] = {
+      x: row.x,
+      y: row.y,
+      width: row.width,
+      src: row.url,
+      mediaId: row.media_id || undefined,
+    }
     if (row.updated_at > updatedAt) updatedAt = row.updated_at
   }
-  return { version: 1 as const, updatedAt, positions }
+  return { version: 1 as const, updatedAt, positions, backgroundUrl, backgroundMediaId }
 }
 
 export default {
@@ -73,11 +89,26 @@ export default {
       await sql`update hero_gates set x = 293, y = 1508, width = 270, updated_at = now() where section_slug = 'archivos'`
       await sql`update hero_gates set x = 2408, y = 1609, width = 250, updated_at = now() where section_slug = 'contacto'`
       const rows = (await sql`
-        select g.section_slug as slug, g.x, g.y, g.width, m.url, g.updated_at
+        select g.section_slug as slug, g.x, g.y, g.width, g.media_id, m.url, g.updated_at
         from hero_gates g
         left join media m on m.id = g.media_id
+        order by g.section_slug
       `) as HeroRow[]
-      return Response.json(toHeroLayout(rows))
+      let backgroundUrl = BG_FALLBACK
+      let backgroundMediaId: string | undefined
+      try {
+        const bg = (await sql`
+          select b.media_id, m.url
+          from hero_background b
+          left join media m on m.id = b.media_id
+          where b.id = 1
+        `) as { media_id: string | null; url: string | null }[]
+        if (bg[0]?.url) backgroundUrl = bg[0].url
+        if (bg[0]?.media_id) backgroundMediaId = bg[0].media_id
+      } catch {
+        /* db/010_hero_background.sql still missing */
+      }
+      return Response.json(toHeroLayout(rows, backgroundUrl, backgroundMediaId))
     } catch (error) {
       console.error(error)
       return Response.json({ error: 'Error de servidor' }, { status: 500 })

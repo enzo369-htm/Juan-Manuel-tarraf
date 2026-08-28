@@ -20,18 +20,62 @@ type HeroRow = {
   x: number
   y: number
   width: number
+  media_id: string | null
   url: string
   updated_at: string
 }
 
-function toHeroLayout(rows: HeroRow[]) {
-  const positions: Record<string, { x: number; y: number; width: number; src?: string }> = {}
+const BG_FALLBACK = '/works/img fondo hero.jpg'
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+}
+
+function toHeroLayout(
+  rows: HeroRow[],
+  backgroundUrl = BG_FALLBACK,
+  backgroundMediaId?: string,
+) {
+  const positions: Record<
+    string,
+    { x: number; y: number; width: number; src?: string; mediaId?: string }
+  > = {}
   let updatedAt = new Date(0).toISOString()
   for (const row of rows) {
-    positions[row.slug] = { x: row.x, y: row.y, width: row.width, src: row.url }
+    positions[row.slug] = {
+      x: row.x,
+      y: row.y,
+      width: row.width,
+      src: row.url,
+      mediaId: row.media_id || undefined,
+    }
     if (row.updated_at > updatedAt) updatedAt = row.updated_at
   }
-  return { version: 1 as const, updatedAt, positions }
+  return { version: 1 as const, updatedAt, positions, backgroundUrl, backgroundMediaId }
+}
+
+async function loadHero(db: ReturnType<typeof sql>) {
+  const rows = (await db`
+    select g.section_slug as slug, g.x, g.y, g.width, g.media_id, m.url, g.updated_at
+    from hero_gates g
+    left join media m on m.id = g.media_id
+    order by g.section_slug
+  `) as HeroRow[]
+  let backgroundUrl = BG_FALLBACK
+  let backgroundMediaId: string | undefined
+  try {
+    const bg = (await db`
+      select b.media_id, m.url
+      from hero_background b
+      left join media m on m.id = b.media_id
+      where b.id = 1
+    `) as { media_id: string | null; url: string | null }[]
+    if (bg[0]?.url) backgroundUrl = bg[0].url
+    if (bg[0]?.media_id) backgroundMediaId = bg[0].media_id
+  } catch {
+    /* db/010_hero_background.sql still missing */
+  }
+  return toHeroLayout(rows, backgroundUrl, backgroundMediaId)
 }
 
 export async function handleApi(req: ApiRequest, res: ApiResponse) {
@@ -67,13 +111,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         sendJson(res, 503, { error: 'DATABASE_URL no configurada' })
         return
       }
-      const rows = (await sql()`
-        select g.section_slug as slug, g.x, g.y, g.width, m.url, g.updated_at
-        from hero_gates g
-        left join media m on m.id = g.media_id
-        order by g.section_slug
-      `) as HeroRow[]
-      sendJson(res, 200, toHeroLayout(rows))
+      sendJson(res, 200, await loadHero(sql()))
       return
     }
 
@@ -84,26 +122,49 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         return
       }
       const body = await readJson<{
-        positions: Record<string, { x: number; y: number; width: number }>
+        positions?: Record<string, { x: number; y: number; width: number; mediaId?: string }>
+        backgroundMediaId?: string
       }>(req)
       const db = sql()
       for (const [slug, pos] of Object.entries(body.positions ?? {})) {
-        await db`
-          update hero_gates
-          set x = ${Math.round(pos.x)},
-              y = ${Math.round(pos.y)},
-              width = ${Math.round(pos.width)},
-              updated_at = now()
-          where section_slug = ${slug}
-        `
+        if (!/^[a-z]+$/.test(slug)) continue
+        const mediaId =
+          typeof pos.mediaId === 'string' && isUuid(pos.mediaId) ? pos.mediaId : null
+        if (mediaId) {
+          await db`
+            update hero_gates
+            set x = ${Math.round(pos.x)},
+                y = ${Math.round(pos.y)},
+                width = ${Math.round(pos.width)},
+                media_id = ${mediaId},
+                updated_at = now()
+            where section_slug = ${slug}
+          `
+        } else {
+          await db`
+            update hero_gates
+            set x = ${Math.round(pos.x)},
+                y = ${Math.round(pos.y)},
+                width = ${Math.round(pos.width)},
+                updated_at = now()
+            where section_slug = ${slug}
+          `
+        }
       }
-      const rows = (await db`
-        select g.section_slug as slug, g.x, g.y, g.width, m.url, g.updated_at
-        from hero_gates g
-        left join media m on m.id = g.media_id
-        order by g.section_slug
-      `) as HeroRow[]
-      sendJson(res, 200, toHeroLayout(rows))
+      if (typeof body.backgroundMediaId === 'string' && isUuid(body.backgroundMediaId)) {
+        try {
+          await db`
+            insert into hero_background (id, media_id, updated_at)
+            values (1, ${body.backgroundMediaId}, now())
+            on conflict (id) do update
+            set media_id = excluded.media_id, updated_at = now()
+          `
+        } catch {
+          sendJson(res, 503, { error: 'Falta correr db/010_hero_background.sql en Neon' })
+          return
+        }
+      }
+      sendJson(res, 200, await loadHero(db))
       return
     }
 
@@ -120,12 +181,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
       await db`update hero_gates set x = 1789, y = 236, width = 300, updated_at = now() where section_slug = 'exposiciones'`
       await db`update hero_gates set x = 293, y = 1508, width = 270, updated_at = now() where section_slug = 'archivos'`
       await db`update hero_gates set x = 2408, y = 1609, width = 250, updated_at = now() where section_slug = 'contacto'`
-      const rows = (await db`
-        select g.section_slug as slug, g.x, g.y, g.width, m.url, g.updated_at
-        from hero_gates g
-        left join media m on m.id = g.media_id
-      `) as HeroRow[]
-      sendJson(res, 200, toHeroLayout(rows))
+      sendJson(res, 200, await loadHero(db))
       return
     }
 
@@ -407,6 +463,10 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
       const body = await readBody(req)
       if (!body.length) {
         sendJson(res, 400, { error: 'Archivo vacío' })
+        return
+      }
+      if (body.length > 12 * 1024 * 1024) {
+        sendJson(res, 413, { error: 'La imagen es demasiado grande' })
         return
       }
 
