@@ -54,15 +54,29 @@ export async function downscaleImage(file: File, maxDim = 2400, quality = 0.82):
   return toJpegFile(blob, file.name)
 }
 
+const HERO_TOO_HEAVY = 'La imagen es demasiado pesada. Probá un JPEG más liviano (máx. ~4 MB).'
+
+function assertHeroUploadSize(file: { size: number }) {
+  if (file.size > HERO_UPLOAD_MAX_BYTES) {
+    throw new Error(HERO_TOO_HEAVY)
+  }
+}
+
 /** High-quality path for hero gates and the hero background. */
 export async function prepareHeroImage(file: File): Promise<File> {
-  if (!file.type.startsWith('image/')) return file
-  if (file.type === 'image/gif' || file.type === 'image/svg+xml') return file
+  if (!file.type.startsWith('image/')) {
+    throw new Error('El archivo no es una imagen')
+  }
+  if (file.type === 'image/gif' || file.type === 'image/svg+xml') {
+    assertHeroUploadSize(file)
+    return file
+  }
 
   let bitmap: ImageBitmap
   try {
     bitmap = await createImageBitmap(file)
   } catch {
+    assertHeroUploadSize(file)
     return file
   }
 
@@ -80,6 +94,7 @@ export async function prepareHeroImage(file: File): Promise<File> {
   let blob = await encodeJpeg(bitmap, w, h, quality)
   if (!blob) {
     bitmap.close()
+    assertHeroUploadSize(file)
     return file
   }
   while (blob.size > HERO_UPLOAD_MAX_BYTES && quality > 0.84) {
@@ -94,5 +109,7 @@ export async function prepareHeroImage(file: File): Promise<File> {
     return file
   }
 
-  return toJpegFile(blob, file.name)
+  const next = toJpegFile(blob, file.name)
+  assertHeroUploadSize(next)
+  return next
 }

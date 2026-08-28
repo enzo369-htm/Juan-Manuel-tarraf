@@ -199,6 +199,10 @@ export async function apiUploadMedia(
 
 /** Hero gates and background: no x-section (must not create a series placement). */
 export async function apiUploadHeroMedia(file: File) {
-  const { prepareHeroImage } = await import('./downscaleImage')
-  return postMediaFile(await prepareHeroImage(file))
+  const { prepareHeroImage, HERO_UPLOAD_MAX_BYTES } = await import('./downscaleImage')
+  const payload = await prepareHeroImage(file)
+  if (payload.size > HERO_UPLOAD_MAX_BYTES) {
+    throw new Error('La imagen es demasiado pesada. Probá un JPEG más liviano (máx. ~4 MB).')
+  }
+  return postMediaFile(payload)
 }

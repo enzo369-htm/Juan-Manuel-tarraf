@@ -59,7 +59,7 @@ function toHeroLayout(
       x: row.x,
       y: row.y,
       width: row.width,
-      src: row.url,
+      src: row.url || undefined,
       mediaId: row.media_id || undefined,
     }
     if (row.updated_at > updatedAt) updatedAt = row.updated_at

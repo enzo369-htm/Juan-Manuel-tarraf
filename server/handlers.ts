@@ -31,6 +31,14 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
 }
 
+function isMissingHeroBackgroundTable(error: unknown) {
+  if (!error || typeof error !== 'object') return false
+  const code = 'code' in error ? String((error as { code?: string }).code) : ''
+  if (code === '42P01') return true
+  const message = error instanceof Error ? error.message : String(error)
+  return /hero_background/i.test(message) && /does not exist|undefined_table/i.test(message)
+}
+
 function toHeroLayout(
   rows: HeroRow[],
   backgroundUrl = BG_FALLBACK,
@@ -46,7 +54,7 @@ function toHeroLayout(
       x: row.x,
       y: row.y,
       width: row.width,
-      src: row.url,
+      src: row.url || undefined,
       mediaId: row.media_id || undefined,
     }
     if (row.updated_at > updatedAt) updatedAt = row.updated_at
@@ -159,9 +167,12 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
             on conflict (id) do update
             set media_id = excluded.media_id, updated_at = now()
           `
-        } catch {
-          sendJson(res, 503, { error: 'Falta correr db/010_hero_background.sql en Neon' })
-          return
+        } catch (error) {
+          if (isMissingHeroBackgroundTable(error)) {
+            sendJson(res, 503, { error: 'Falta correr db/010_hero_background.sql en Neon' })
+            return
+          }
+          throw error
         }
       }
       sendJson(res, 200, await loadHero(db))

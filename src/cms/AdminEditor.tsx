@@ -58,6 +58,7 @@ export function AdminEditor() {
   const fileTargetRef = useRef<UploadTarget | null>(null)
   const draftRef = useRef(draft)
   const dragRef = useRef<DragState | null>(null)
+  const busyRef = useRef(false)
   draftRef.current = draft
 
   const { scale, screenToWorld, fit, zoomBy } = useAdminViewport(viewportRef, worldRef)
@@ -90,6 +91,7 @@ export function AdminEditor() {
         setStatus('Guardado')
       } catch (error) {
         setStatus(error instanceof Error ? error.message : 'Error')
+        throw error
       } finally {
         setSaving(false)
       }
@@ -120,8 +122,6 @@ export function AdminEditor() {
         const next = draftRef.current.map((w) =>
           w.id === target ? { ...w, src: uploaded.url!, mediaId: uploaded.id } : w,
         )
-        draftRef.current = next
-        setDraft(next)
         await persist(next)
       }
     } catch (error) {
@@ -137,7 +137,7 @@ export function AdminEditor() {
     event: ReactPointerEvent,
   ) => {
     const piece = draftRef.current.find((w) => w.id === id)
-    if (!piece) return
+    if (!piece || busyRef.current) return
     event.preventDefault()
     const world = screenToWorld(event.clientX, event.clientY)
     setSelectedId(id)
@@ -188,8 +188,8 @@ export function AdminEditor() {
       dragRef.current = null
       const next = draftRef.current
       setDraft(next)
-      if (drag.moved) {
-        void persist(next)
+      if (drag.moved && !busyRef.current) {
+        void persist(next).catch(() => {})
       }
     }
 
@@ -205,23 +205,28 @@ export function AdminEditor() {
 
   const selected = draft.find((w) => w.id === selectedId) ?? null
   const busy = saving || uploading !== null
+  busyRef.current = busy
 
   const nudgeSize = (delta: number) => {
-    if (!selected) return
+    if (!selected || busyRef.current) return
     const next = applyPiece(draft, selected.id, selected.x, selected.y, selected.width + delta)
     draftRef.current = next
     setDraft(next)
-    void persist(next)
+    void persist(next).catch(() => {})
   }
 
   const onReset = async () => {
+    if (busyRef.current) return
     if (!window.confirm('¿Volver las 6 obras a la posición y tamaño iniciales?')) return
+    setSaving(true)
     try {
       const restored = await restoreDefaults()
       setDraft(layoutToWorks(restored))
       setStatus('Restablecido')
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Error')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -255,11 +260,11 @@ export function AdminEditor() {
             {selected ? (
               <>
                 <span>{selected.label}</span>
-                <button type="button" className="admin-bar__btn" onClick={() => nudgeSize(-24)}>
+                <button type="button" className="admin-bar__btn" disabled={busy} onClick={() => nudgeSize(-24)}>
                   −
                 </button>
                 <span>{selected.width}px</span>
-                <button type="button" className="admin-bar__btn" onClick={() => nudgeSize(24)}>
+                <button type="button" className="admin-bar__btn" disabled={busy} onClick={() => nudgeSize(24)}>
                   +
                 </button>
               </>
@@ -267,14 +272,14 @@ export function AdminEditor() {
               <span>Elegí una obra</span>
             )}
           </div>
-          <button type="button" className="admin-bar__btn" onClick={() => void onReset()}>
+          <button type="button" className="admin-bar__btn" disabled={busy} onClick={() => void onReset()}>
             Restablecer
           </button>
           <button
             type="button"
             className="admin-bar__btn admin-bar__btn--primary"
             disabled={busy}
-            onClick={() => void persist(draft)}
+            onClick={() => void persist(draft).catch(() => {})}
           >
             {saving ? 'Guardando…' : status === 'Guardado' ? 'Guardado' : 'Guardar'}
           </button>

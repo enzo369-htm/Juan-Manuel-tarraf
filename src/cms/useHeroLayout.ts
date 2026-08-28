@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { sections } from '../data/sections'
 import type { Work } from '../data/works'
 import { apiGetHero, apiResetHero, apiSaveHero } from './api'
@@ -32,18 +32,20 @@ function initialLayout() {
 export function useHeroLayout() {
   const [layout, setLayout] = useState<HeroLayout>(initialLayout)
   const [ready, setReady] = useState(() => readCachedLayout() !== null)
+  const epochRef = useRef(0)
 
   useEffect(() => {
     let cancelled = false
+    const epoch = epochRef.current
     void apiGetHero()
       .then((next) => {
-        if (cancelled) return
+        if (cancelled || epoch !== epochRef.current) return
         setLayout(next)
         setReady(true)
         writeCachedLayout(next)
       })
       .catch(() => {
-        if (cancelled) return
+        if (cancelled || epoch !== epochRef.current) return
         if (readCachedLayout()) {
           setReady(true)
           return
@@ -58,6 +60,7 @@ export function useHeroLayout() {
 
   const save = useCallback(async (next: HeroLayout) => {
     const stored = await apiSaveHero(next)
+    epochRef.current += 1
     setLayout(stored)
     writeCachedLayout(stored)
     return stored
@@ -65,6 +68,7 @@ export function useHeroLayout() {
 
   const restoreDefaults = useCallback(async () => {
     const stored = await apiResetHero()
+    epochRef.current += 1
     setLayout(stored)
     writeCachedLayout(stored)
     return stored
