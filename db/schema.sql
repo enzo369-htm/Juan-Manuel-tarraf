@@ -36,16 +36,29 @@ create table if not exists hero_gates (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists exhibitions (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  description text not null default '',
+  cover_media_id uuid references media (id) on delete set null,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists section_canvases (
   id uuid primary key default gen_random_uuid(),
   section_slug text not null references sections (slug) on delete cascade,
+  exhibition_id uuid references exhibitions (id) on delete cascade,
   sort_order int not null default 0,
   height_ratio double precision not null default 1.2,
   kind text not null default 'canvas',
   title text not null default '',
-  description text not null default '',
-  unique (section_slug, sort_order)
+  description text not null default ''
 );
+
+create unique index if not exists section_canvases_exhibition_sort
+  on section_canvases (exhibition_id, sort_order)
+  where exhibition_id is not null;
 
 create table if not exists placements (
   id uuid primary key default gen_random_uuid(),

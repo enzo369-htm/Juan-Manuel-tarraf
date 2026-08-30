@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { FreeCanvas } from '../canvas/FreeCanvas'
 import { getSection } from '../data/sections'
 import {
   apiAddCanvas,
   apiDeleteCanvas,
+  apiGetExhibition,
   apiGetPlacements,
   apiSavePlacements,
   apiUploadMedia,
@@ -19,10 +21,12 @@ function blockKind(block: SectionCanvas): 'text' | 'canvas' {
 
 type Props = {
   slug: string
+  exhibitionId?: string
 }
 
-export function AdminSectionCanvas({ slug }: Props) {
+export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
   const section = getSection(slug)
+  const [heading, setHeading] = useState(section?.label ?? slug)
   const [canvases, setCanvases] = useState<SectionCanvas[]>([])
   const [selected, setSelected] = useState<{ canvasId: string; pieceId: string } | null>(null)
   const [status, setStatus] = useState('Listo')
@@ -35,11 +39,21 @@ export function AdminSectionCanvas({ slug }: Props) {
   const canvasCount = canvases.filter((block) => blockKind(block) === 'canvas').length
 
   const refresh = useCallback(async () => {
-    const data = await apiGetPlacements(slug)
+    const data = await apiGetPlacements(slug, exhibitionId)
     setCanvases(data.canvases)
     setDirty(false)
     setSelected(null)
-  }, [slug])
+  }, [slug, exhibitionId])
+
+  useEffect(() => {
+    if (!exhibitionId) {
+      setHeading(section?.label ?? slug)
+      return
+    }
+    void apiGetExhibition(exhibitionId)
+      .then((data) => setHeading(data.exhibition.title))
+      .catch(() => setHeading(section?.label ?? slug))
+  }, [exhibitionId, section?.label, slug])
 
   useEffect(() => {
     void refresh().catch((error) => {
@@ -57,7 +71,7 @@ export function AdminSectionCanvas({ slug }: Props) {
     setSaving(true)
     setStatus('Guardando…')
     try {
-      const saved = await apiSavePlacements(slug, canvases)
+      const saved = await apiSavePlacements(slug, canvases, exhibitionId)
       if (saved.canvases) setCanvases(saved.canvases)
       setDirty(false)
       setStatus('Guardado')
@@ -73,7 +87,7 @@ export function AdminSectionCanvas({ slug }: Props) {
     if (count >= MAX_PER_KIND) return
     setStatus(kind === 'text' ? 'Agregando texto…' : 'Agregando lienzo…')
     try {
-      const { canvas } = await apiAddCanvas(slug, kind)
+      const { canvas } = await apiAddCanvas(slug, kind, exhibitionId)
       setCanvases((prev) => [...prev, canvas])
       setStatus(kind === 'text' ? 'Texto agregado — guardá cuando lo edites' : 'Lienzo agregado — acordate de guardar las obras')
     } catch (error) {
@@ -85,7 +99,7 @@ export function AdminSectionCanvas({ slug }: Props) {
     if (!window.confirm('¿Quitar este bloque?')) return
     setStatus('Quitando…')
     try {
-      await apiDeleteCanvas(slug, canvasId)
+      await apiDeleteCanvas(slug, canvasId, exhibitionId)
       setCanvases((prev) => prev.filter((canvas) => canvas.id !== canvasId))
       if (selected?.canvasId === canvasId) setSelected(null)
       setStatus('Quitado')
@@ -139,10 +153,15 @@ export function AdminSectionCanvas({ slug }: Props) {
     <section className="admin-panel admin-panel--canvas">
       <header className="admin-panel__head">
         <div>
-          <p className="admin-bar__kicker">Serie</p>
-          <h1>{section?.label ?? slug}</h1>
+          <p className="admin-bar__kicker">{exhibitionId ? 'Exposición' : 'Serie'}</p>
+          <h1>{heading}</h1>
         </div>
         <div className="admin-bar__actions">
+          {exhibitionId ? (
+            <Link className="admin-bar__btn" to="/admin/exposiciones">
+              Volver
+            </Link>
+          ) : null}
           <span className={`admin-bar__status${dirty ? ' is-dirty' : ''}`}>{status}</span>
           {selected && (
             <button type="button" className="admin-bar__btn admin-bar__btn--danger" onClick={onRemoveSelected}>

@@ -31,6 +31,30 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
 }
 
+function queryParam(req: ApiRequest, name: string) {
+  return new URL(req.url ?? '', 'http://local').searchParams.get(name) || ''
+}
+
+function toExhibition(row: {
+  id: string
+  title: string
+  description: string
+  sort_order: number
+  created_at: string
+  cover_media_id: string | null
+  cover_url?: string | null
+}) {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    sortOrder: row.sort_order,
+    createdAt: row.created_at,
+    coverMediaId: row.cover_media_id || undefined,
+    coverUrl: row.cover_url || undefined,
+  }
+}
+
 function isMissingHeroBackgroundTable(error: unknown) {
   if (!error || typeof error !== 'object') return false
   const code = 'code' in error ? String((error as { code?: string }).code) : ''
@@ -260,6 +284,9 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         return
       }
       const db = sql()
+      const exhibitionId = isUuid(queryParam(req, 'exhibitionId'))
+        ? queryParam(req, 'exhibitionId')
+        : ''
       let canvasRows: {
         id: string
         height_ratio: number
@@ -268,11 +295,23 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         description?: string | null
       }[] = []
       try {
-        canvasRows = (await db`
-          select id, height_ratio, kind, title, description from section_canvases
-          where section_slug = ${placeMatch[1]}
-          order by sort_order
-        `) as typeof canvasRows
+        canvasRows = exhibitionId
+          ? ((await db`
+              select id, height_ratio, kind, title, description from section_canvases
+              where section_slug = ${placeMatch[1]} and exhibition_id = ${exhibitionId}
+              order by sort_order
+            `) as typeof canvasRows)
+          : placeMatch[1] === 'exposiciones'
+            ? ((await db`
+                select id, height_ratio, kind, title, description from section_canvases
+                where section_slug = ${placeMatch[1]} and exhibition_id is null
+                order by sort_order
+              `) as typeof canvasRows)
+            : ((await db`
+                select id, height_ratio, kind, title, description from section_canvases
+                where section_slug = ${placeMatch[1]}
+                order by sort_order
+              `) as typeof canvasRows)
       } catch {
         try {
           canvasRows = (await db`
@@ -330,14 +369,23 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         sendJson(res, 503, { error: 'DATABASE_URL no configurada' })
         return
       }
-      const payload = await readJson<{ kind?: string }>(req)
+      const payload = await readJson<{ kind?: string; exhibitionId?: string }>(req)
       const kind = payload.kind === 'text' ? 'text' : 'canvas'
+      const exhibitionId =
+        typeof payload.exhibitionId === 'string' && isUuid(payload.exhibitionId)
+          ? payload.exhibitionId
+          : ''
       const db = sql()
       let existing: { id: string; kind?: string | null }[] = []
       try {
-        existing = (await db`
-          select id, kind from section_canvases where section_slug = ${placeMatch[1]}
-        `) as typeof existing
+        existing = exhibitionId
+          ? ((await db`
+              select id, kind from section_canvases
+              where section_slug = ${placeMatch[1]} and exhibition_id = ${exhibitionId}
+            `) as typeof existing)
+          : ((await db`
+              select id, kind from section_canvases where section_slug = ${placeMatch[1]}
+            `) as typeof existing)
       } catch {
         existing = (await db`
           select id from section_canvases where section_slug = ${placeMatch[1]}
@@ -351,11 +399,18 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         return
       }
       try {
-        const created = (await db`
-          insert into section_canvases (section_slug, sort_order, height_ratio, kind, title, description)
-          values (${placeMatch[1]}, ${existing.length}, 1.2, ${kind}, '', '')
-          returning id, height_ratio, kind, title, description
-        `) as { id: string; height_ratio: number; kind: string; title: string; description: string }[]
+        const created = exhibitionId
+          ? ((await db`
+              insert into section_canvases
+                (section_slug, exhibition_id, sort_order, height_ratio, kind, title, description)
+              values (${placeMatch[1]}, ${exhibitionId}, ${existing.length}, 1.2, ${kind}, '', '')
+              returning id, height_ratio, kind, title, description
+            `) as { id: string; height_ratio: number; kind: string; title: string; description: string }[])
+          : ((await db`
+              insert into section_canvases (section_slug, sort_order, height_ratio, kind, title, description)
+              values (${placeMatch[1]}, ${existing.length}, 1.2, ${kind}, '', '')
+              returning id, height_ratio, kind, title, description
+            `) as { id: string; height_ratio: number; kind: string; title: string; description: string }[])
         const row = created[0]
         sendJson(res, 200, {
           canvas: {
@@ -390,11 +445,20 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         delete from section_canvases
         where id = ${canvasId} and section_slug = ${placeMatch[1]}
       `
-      const leftover = (await db`
-        select id from section_canvases
-        where section_slug = ${placeMatch[1]}
-        order by sort_order
-      `) as { id: string }[]
+      const exhibitionId = isUuid(queryParam(req, 'exhibitionId'))
+        ? queryParam(req, 'exhibitionId')
+        : ''
+      const leftover = exhibitionId
+        ? ((await db`
+            select id from section_canvases
+            where section_slug = ${placeMatch[1]} and exhibition_id = ${exhibitionId}
+            order by sort_order
+          `) as { id: string }[])
+        : ((await db`
+            select id from section_canvases
+            where section_slug = ${placeMatch[1]}
+            order by sort_order
+          `) as { id: string }[])
       for (let i = 0; i < leftover.length; i++) {
         await db`update section_canvases set sort_order = ${i} where id = ${leftover[i].id}`
       }
@@ -513,6 +577,164 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         placementId,
         warning: hasR2() ? undefined : 'R2 no configurado: la URL no es pública hasta que subas a R2',
       })
+      return
+    }
+
+    if (path === '/api/exhibitions' && method === 'GET') {
+      if (!hasDatabase()) {
+        sendJson(res, 200, { exhibitions: [] })
+        return
+      }
+      try {
+        const rows = (await sql()`
+          select e.id, e.title, e.description, e.sort_order, e.created_at,
+                 e.cover_media_id, m.url as cover_url
+          from exhibitions e
+          left join media m on m.id = e.cover_media_id
+          order by e.sort_order, e.created_at desc
+        `) as Parameters<typeof toExhibition>[0][]
+        sendJson(res, 200, { exhibitions: rows.map(toExhibition) })
+      } catch {
+        sendJson(res, 200, { exhibitions: [] })
+      }
+      return
+    }
+
+    if (path === '/api/exhibitions' && method === 'POST') {
+      if (!requireAuth(req, res)) return
+      if (!hasDatabase()) {
+        sendJson(res, 503, { error: 'DATABASE_URL no configurada' })
+        return
+      }
+      const payload = await readJson<{ title?: string; description?: string; coverMediaId?: string }>(req)
+      const title = (payload.title ?? '').trim()
+      if (!title) {
+        sendJson(res, 400, { error: 'El título es obligatorio' })
+        return
+      }
+      const cover =
+        typeof payload.coverMediaId === 'string' && isUuid(payload.coverMediaId)
+          ? payload.coverMediaId
+          : null
+      try {
+        const count = (await sql()`select count(*)::int as n from exhibitions`) as { n: number }[]
+        const created = (await sql()`
+          insert into exhibitions (title, description, cover_media_id, sort_order)
+          values (${title}, ${payload.description ?? ''}, ${cover}, ${count[0]?.n ?? 0})
+          returning id, title, description, sort_order, created_at, cover_media_id
+        `) as {
+          id: string
+          title: string
+          description: string
+          sort_order: number
+          created_at: string
+          cover_media_id: string | null
+        }[]
+        const row = created[0]
+        let coverUrl: string | null = null
+        if (row.cover_media_id) {
+          const media = (await sql()`
+            select url from media where id = ${row.cover_media_id}
+          `) as { url: string }[]
+          coverUrl = media[0]?.url ?? null
+        }
+        sendJson(res, 200, { exhibition: toExhibition({ ...row, cover_url: coverUrl }) })
+      } catch {
+        sendJson(res, 503, { error: 'Falta correr db/011_exhibitions.sql en Neon' })
+      }
+      return
+    }
+
+    const exhibitionMatch = path.match(/^\/api\/exhibitions\/([0-9a-f-]+)$/i)
+    if (exhibitionMatch && method === 'GET') {
+      if (!hasDatabase()) {
+        sendJson(res, 503, { error: 'DATABASE_URL no configurada' })
+        return
+      }
+      if (!isUuid(exhibitionMatch[1])) {
+        sendJson(res, 400, { error: 'Exposición inválida' })
+        return
+      }
+      try {
+        const rows = (await sql()`
+          select e.id, e.title, e.description, e.sort_order, e.created_at,
+                 e.cover_media_id, m.url as cover_url
+          from exhibitions e
+          left join media m on m.id = e.cover_media_id
+          where e.id = ${exhibitionMatch[1]}
+        `) as Parameters<typeof toExhibition>[0][]
+        if (!rows[0]) {
+          sendJson(res, 404, { error: 'No encontrado' })
+          return
+        }
+        sendJson(res, 200, { exhibition: toExhibition(rows[0]) })
+      } catch {
+        sendJson(res, 503, { error: 'Falta correr db/011_exhibitions.sql en Neon' })
+      }
+      return
+    }
+
+    if (exhibitionMatch && (method === 'PUT' || method === 'DELETE')) {
+      if (!requireAuth(req, res)) return
+      if (!hasDatabase()) {
+        sendJson(res, 503, { error: 'DATABASE_URL no configurada' })
+        return
+      }
+      if (!isUuid(exhibitionMatch[1])) {
+        sendJson(res, 400, { error: 'Exposición inválida' })
+        return
+      }
+      if (method === 'DELETE') {
+        try {
+          await sql()`delete from exhibitions where id = ${exhibitionMatch[1]}`
+          sendJson(res, 200, { ok: true })
+        } catch {
+          sendJson(res, 503, { error: 'Falta correr db/011_exhibitions.sql en Neon' })
+        }
+        return
+      }
+      const payload = await readJson<{ title?: string; description?: string; coverMediaId?: string }>(req)
+      const title = (payload.title ?? '').trim()
+      if (!title) {
+        sendJson(res, 400, { error: 'El título es obligatorio' })
+        return
+      }
+      try {
+        const cover =
+          typeof payload.coverMediaId === 'string' && isUuid(payload.coverMediaId)
+            ? payload.coverMediaId
+            : undefined
+        const updated = cover
+          ? ((await sql()`
+              update exhibitions
+              set title = ${title},
+                  description = ${payload.description ?? ''},
+                  cover_media_id = ${cover}
+              where id = ${exhibitionMatch[1]}
+              returning id
+            `) as { id: string }[])
+          : ((await sql()`
+              update exhibitions
+              set title = ${title},
+                  description = ${payload.description ?? ''}
+              where id = ${exhibitionMatch[1]}
+              returning id
+            `) as { id: string }[])
+        if (!updated[0]) {
+          sendJson(res, 404, { error: 'No encontrado' })
+          return
+        }
+        const rows = (await sql()`
+          select e.id, e.title, e.description, e.sort_order, e.created_at,
+                 e.cover_media_id, m.url as cover_url
+          from exhibitions e
+          left join media m on m.id = e.cover_media_id
+          where e.id = ${exhibitionMatch[1]}
+        `) as Parameters<typeof toExhibition>[0][]
+        sendJson(res, 200, { exhibition: toExhibition(rows[0]) })
+      } catch {
+        sendJson(res, 503, { error: 'Falta correr db/011_exhibitions.sql en Neon' })
+      }
       return
     }
 

@@ -126,33 +126,96 @@ export type SectionCanvas = {
   pieces: CanvasPiece[]
 }
 
-export async function apiGetPlacements(slug: string) {
+export type Exhibition = {
+  id: string
+  title: string
+  description: string
+  sortOrder: number
+  createdAt: string
+  coverMediaId?: string
+  coverUrl?: string
+}
+
+export async function apiListExhibitions() {
+  return request<{ exhibitions: Exhibition[] }>('/api/exhibitions')
+}
+
+export async function apiGetExhibition(id: string) {
+  return request<{ exhibition: Exhibition }>(`/api/exhibitions/${id}`)
+}
+
+export async function apiCreateExhibition(payload: {
+  title: string
+  description?: string
+  coverMediaId?: string
+}) {
+  return request<{ exhibition: Exhibition }>('/api/exhibitions', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function apiSaveExhibition(
+  id: string,
+  payload: { title: string; description?: string; coverMediaId?: string },
+) {
+  return request<{ exhibition: Exhibition }>(`/api/exhibitions/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function apiDeleteExhibition(id: string) {
+  return request<{ ok: boolean }>(`/api/exhibitions/${id}`, { method: 'DELETE' })
+}
+
+function placementsPath(slug: string, exhibitionId?: string, extra?: string) {
+  const params = new URLSearchParams()
+  if (exhibitionId) params.set('exhibitionId', exhibitionId)
+  if (extra) {
+    const more = new URLSearchParams(extra)
+    more.forEach((value, key) => params.set(key, value))
+  }
+  const query = params.toString()
+  return `/api/placements/${slug}${query ? `?${query}` : ''}`
+}
+
+export async function apiGetPlacements(slug: string, exhibitionId?: string) {
   const data = await request<{
     canvases?: SectionCanvas[]
     pieces?: CanvasPiece[]
     heightRatio?: number
-  }>(`/api/placements/${slug}`)
+  }>(placementsPath(slug, exhibitionId))
   return { canvases: data.canvases ?? [] }
 }
 
-export async function apiSavePlacements(slug: string, canvases: SectionCanvas[]) {
-  return request<{ ok: boolean; canvases?: SectionCanvas[] }>(`/api/placements/${slug}`, {
+export async function apiSavePlacements(
+  slug: string,
+  canvases: SectionCanvas[],
+  exhibitionId?: string,
+) {
+  return request<{ ok: boolean; canvases?: SectionCanvas[] }>(placementsPath(slug, exhibitionId), {
     method: 'PUT',
-    body: JSON.stringify({ canvases }),
+    body: JSON.stringify({ canvases, exhibitionId }),
   })
 }
 
-export async function apiAddCanvas(slug: string, kind: 'text' | 'canvas' = 'canvas') {
-  return request<{ canvas: SectionCanvas }>(`/api/placements/${slug}`, {
+export async function apiAddCanvas(
+  slug: string,
+  kind: 'text' | 'canvas' = 'canvas',
+  exhibitionId?: string,
+) {
+  return request<{ canvas: SectionCanvas }>(placementsPath(slug, exhibitionId), {
     method: 'POST',
-    body: JSON.stringify({ kind }),
+    body: JSON.stringify({ kind, exhibitionId }),
   })
 }
 
-export async function apiDeleteCanvas(slug: string, canvasId: string) {
-  return request<{ ok: boolean }>(`/api/placements/${slug}?canvasId=${canvasId}`, {
-    method: 'DELETE',
-  })
+export async function apiDeleteCanvas(slug: string, canvasId: string, exhibitionId?: string) {
+  return request<{ ok: boolean }>(
+    placementsPath(slug, exhibitionId, `canvasId=${canvasId}`),
+    { method: 'DELETE' },
+  )
 }
 
 type UploadedMedia = {

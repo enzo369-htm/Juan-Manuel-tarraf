@@ -40,6 +40,13 @@ function slugOf(request: Request) {
   return fromPath || url.searchParams.get('slug') || ''
 }
 
+function exhibitionIdOf(request: Request, body?: { exhibitionId?: string }) {
+  const fromBody = typeof body?.exhibitionId === 'string' ? body.exhibitionId : ''
+  const fromQuery = new URL(request.url).searchParams.get('exhibitionId') || ''
+  const value = fromBody || fromQuery
+  return isUuid(value) ? value : ''
+}
+
 function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
 }
@@ -105,15 +112,30 @@ function toBlock(canvas: CanvasRow, pieces: ReturnType<typeof toPieces>) {
 async function readCanvases(
   sql: (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown>,
   slug: string,
+  exhibitionId = '',
 ) {
   let canvasRows: CanvasRow[] = []
   try {
-    canvasRows = (await sql`
-      select id, sort_order, height_ratio, kind, title, description
-      from section_canvases
-      where section_slug = ${slug}
-      order by sort_order
-    `) as CanvasRow[]
+    canvasRows = exhibitionId
+      ? ((await sql`
+          select id, sort_order, height_ratio, kind, title, description
+          from section_canvases
+          where section_slug = ${slug} and exhibition_id = ${exhibitionId}
+          order by sort_order
+        `) as CanvasRow[])
+      : slug === 'exposiciones'
+        ? ((await sql`
+            select id, sort_order, height_ratio, kind, title, description
+            from section_canvases
+            where section_slug = ${slug} and exhibition_id is null
+            order by sort_order
+          `) as CanvasRow[])
+        : ((await sql`
+            select id, sort_order, height_ratio, kind, title, description
+            from section_canvases
+            where section_slug = ${slug}
+            order by sort_order
+          `) as CanvasRow[])
   } catch {
     try {
       canvasRows = (await sql`
@@ -167,7 +189,8 @@ export default {
       const sql = neon(dbUrl)
 
       if (request.method === 'GET') {
-        const canvases = await readCanvases(sql, slug)
+        const exhibitionId = exhibitionIdOf(request)
+        const canvases = await readCanvases(sql, slug, exhibitionId)
         return Response.json({
           canvases,
           pieces: canvases.find((block) => block.kind === 'canvas')?.pieces ?? [],
@@ -180,13 +203,27 @@ export default {
       }
 
       if (request.method === 'POST') {
-        const payload = (await request.json().catch(() => ({}))) as { kind?: string }
+        const payload = (await request.json().catch(() => ({}))) as {
+          kind?: string
+          exhibitionId?: string
+        }
+        const exhibitionId = exhibitionIdOf(request, payload)
         const kind = payload.kind === 'text' ? 'text' : 'canvas'
         let existing: { id: string; kind?: string | null }[] = []
         try {
-          existing = (await sql`
-            select id, kind from section_canvases where section_slug = ${slug}
-          `) as { id: string; kind?: string | null }[]
+          existing = exhibitionId
+            ? ((await sql`
+                select id, kind from section_canvases
+                where section_slug = ${slug} and exhibition_id = ${exhibitionId}
+              `) as { id: string; kind?: string | null }[])
+            : slug === 'exposiciones'
+              ? ((await sql`
+                  select id, kind from section_canvases
+                  where section_slug = ${slug} and exhibition_id is null
+                `) as { id: string; kind?: string | null }[])
+              : ((await sql`
+                  select id, kind from section_canvases where section_slug = ${slug}
+                `) as { id: string; kind?: string | null }[])
         } catch {
           existing = (await sql`
             select id from section_canvases where section_slug = ${slug}
@@ -201,11 +238,18 @@ export default {
         }
         const nextOrder = existing.length
         try {
-          const created = (await sql`
-            insert into section_canvases (section_slug, sort_order, height_ratio, kind, title, description)
-            values (${slug}, ${nextOrder}, 1.2, ${kind}, '', '')
-            returning id, height_ratio, kind, title, description
-          `) as { id: string; height_ratio: number; kind: string; title: string; description: string }[]
+          const created = exhibitionId
+            ? ((await sql`
+                insert into section_canvases
+                  (section_slug, exhibition_id, sort_order, height_ratio, kind, title, description)
+                values (${slug}, ${exhibitionId}, ${nextOrder}, 1.2, ${kind}, '', '')
+                returning id, height_ratio, kind, title, description
+              `) as { id: string; height_ratio: number; kind: string; title: string; description: string }[])
+            : ((await sql`
+                insert into section_canvases (section_slug, sort_order, height_ratio, kind, title, description)
+                values (${slug}, ${nextOrder}, 1.2, ${kind}, '', '')
+                returning id, height_ratio, kind, title, description
+              `) as { id: string; height_ratio: number; kind: string; title: string; description: string }[])
           const row = created[0]
           return Response.json({
             canvas: {
@@ -227,6 +271,7 @@ export default {
 
       if (request.method === 'DELETE') {
         const canvasId = new URL(request.url).searchParams.get('canvasId') || ''
+        const exhibitionId = exhibitionIdOf(request)
         if (!isUuid(canvasId)) {
           return Response.json({ error: 'Bloque inválido' }, { status: 400 })
         }
@@ -234,11 +279,17 @@ export default {
           delete from section_canvases
           where id = ${canvasId} and section_slug = ${slug}
         `
-        const leftover = (await sql`
-          select id from section_canvases
-          where section_slug = ${slug}
-          order by sort_order
-        `) as { id: string }[]
+        const leftover = exhibitionId
+          ? ((await sql`
+              select id from section_canvases
+              where section_slug = ${slug} and exhibition_id = ${exhibitionId}
+              order by sort_order
+            `) as { id: string }[])
+          : ((await sql`
+              select id from section_canvases
+              where section_slug = ${slug}
+              order by sort_order
+            `) as { id: string }[])
         for (let i = 0; i < leftover.length; i++) {
           await sql`
             update section_canvases set sort_order = ${i} where id = ${leftover[i].id}
@@ -267,7 +318,9 @@ export default {
           canvases?: BlockIn[]
           pieces?: PieceIn[]
           heightRatio?: number
+          exhibitionId?: string
         }
+        const exhibitionId = exhibitionIdOf(request, body)
 
         const canvases: BlockIn[] = Array.isArray(body.canvases) ? body.canvases : []
 
@@ -277,7 +330,7 @@ export default {
           return Response.json({ error: 'Máximo 4 textos y 4 lienzos por sección' }, { status: 400 })
         }
 
-        const saved = await readCanvases(sql, slug)
+        const saved = await readCanvases(sql, slug, exhibitionId)
         for (let i = 0; i < canvases.length; i++) {
           const canvas = canvases[i]
           const kind = canvas.kind === 'text' ? 'text' : 'canvas'
@@ -292,11 +345,18 @@ export default {
               : 1.2
           let canvasId = isUuid(canvas.id) ? canvas.id : saved[i]?.id
           if (!canvasId) {
-            const created = (await sql`
-              insert into section_canvases (section_slug, sort_order, height_ratio, kind, title, description)
-              values (${slug}, ${i}, ${ratio}, ${kind}, ${title}, ${description})
-              returning id
-            `) as { id: string }[]
+            const created = exhibitionId
+              ? ((await sql`
+                  insert into section_canvases
+                    (section_slug, exhibition_id, sort_order, height_ratio, kind, title, description)
+                  values (${slug}, ${exhibitionId}, ${i}, ${ratio}, ${kind}, ${title}, ${description})
+                  returning id
+                `) as { id: string }[])
+              : ((await sql`
+                  insert into section_canvases (section_slug, sort_order, height_ratio, kind, title, description)
+                  values (${slug}, ${i}, ${ratio}, ${kind}, ${title}, ${description})
+                  returning id
+                `) as { id: string }[])
             canvasId = created[0]?.id
           }
           if (!canvasId) {
@@ -353,7 +413,7 @@ export default {
             }
           }
         }
-        const canvasesOut = await readCanvases(sql, slug)
+        const canvasesOut = await readCanvases(sql, slug, exhibitionId)
         return Response.json({
           ok: true,
           canvases: canvasesOut,
