@@ -581,6 +581,34 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
     }
 
     if (path === '/api/exhibitions' && method === 'GET') {
+      const id = queryParam(req, 'id')
+      if (id) {
+        if (!isUuid(id)) {
+          sendJson(res, 400, { error: 'Exposición inválida' })
+          return
+        }
+        if (!hasDatabase()) {
+          sendJson(res, 503, { error: 'DATABASE_URL no configurada' })
+          return
+        }
+        try {
+          const rows = (await sql()`
+            select e.id, e.title, e.description, e.sort_order, e.created_at,
+                   e.cover_media_id, m.url as cover_url
+            from exhibitions e
+            left join media m on m.id = e.cover_media_id
+            where e.id = ${id}
+          `) as Parameters<typeof toExhibition>[0][]
+          if (!rows[0]) {
+            sendJson(res, 404, { error: 'No encontrado' })
+            return
+          }
+          sendJson(res, 200, { exhibition: toExhibition(rows[0]) })
+        } catch {
+          sendJson(res, 503, { error: 'Falta correr db/011_exhibitions.sql en Neon' })
+        }
+        return
+      }
       if (!hasDatabase()) {
         sendJson(res, 200, { exhibitions: [] })
         return
@@ -645,48 +673,20 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
       return
     }
 
-    const exhibitionMatch = path.match(/^\/api\/exhibitions\/([0-9a-f-]+)$/i)
-    if (exhibitionMatch && method === 'GET') {
-      if (!hasDatabase()) {
-        sendJson(res, 503, { error: 'DATABASE_URL no configurada' })
-        return
-      }
-      if (!isUuid(exhibitionMatch[1])) {
-        sendJson(res, 400, { error: 'Exposición inválida' })
-        return
-      }
-      try {
-        const rows = (await sql()`
-          select e.id, e.title, e.description, e.sort_order, e.created_at,
-                 e.cover_media_id, m.url as cover_url
-          from exhibitions e
-          left join media m on m.id = e.cover_media_id
-          where e.id = ${exhibitionMatch[1]}
-        `) as Parameters<typeof toExhibition>[0][]
-        if (!rows[0]) {
-          sendJson(res, 404, { error: 'No encontrado' })
-          return
-        }
-        sendJson(res, 200, { exhibition: toExhibition(rows[0]) })
-      } catch {
-        sendJson(res, 503, { error: 'Falta correr db/011_exhibitions.sql en Neon' })
-      }
-      return
-    }
-
-    if (exhibitionMatch && (method === 'PUT' || method === 'DELETE')) {
+    if (path === '/api/exhibitions' && (method === 'PUT' || method === 'DELETE')) {
       if (!requireAuth(req, res)) return
       if (!hasDatabase()) {
         sendJson(res, 503, { error: 'DATABASE_URL no configurada' })
         return
       }
-      if (!isUuid(exhibitionMatch[1])) {
+      const id = queryParam(req, 'id')
+      if (!isUuid(id)) {
         sendJson(res, 400, { error: 'Exposición inválida' })
         return
       }
       if (method === 'DELETE') {
         try {
-          await sql()`delete from exhibitions where id = ${exhibitionMatch[1]}`
+          await sql()`delete from exhibitions where id = ${id}`
           sendJson(res, 200, { ok: true })
         } catch {
           sendJson(res, 503, { error: 'Falta correr db/011_exhibitions.sql en Neon' })
@@ -710,14 +710,14 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
               set title = ${title},
                   description = ${payload.description ?? ''},
                   cover_media_id = ${cover}
-              where id = ${exhibitionMatch[1]}
+              where id = ${id}
               returning id
             `) as { id: string }[])
           : ((await sql()`
               update exhibitions
               set title = ${title},
                   description = ${payload.description ?? ''}
-              where id = ${exhibitionMatch[1]}
+              where id = ${id}
               returning id
             `) as { id: string }[])
         if (!updated[0]) {
@@ -729,7 +729,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
                  e.cover_media_id, m.url as cover_url
           from exhibitions e
           left join media m on m.id = e.cover_media_id
-          where e.id = ${exhibitionMatch[1]}
+          where e.id = ${id}
         `) as Parameters<typeof toExhibition>[0][]
         sendJson(res, 200, { exhibition: toExhibition(rows[0]) })
       } catch {

@@ -36,6 +36,12 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
 }
 
+function idOf(request: Request) {
+  const url = new URL(request.url)
+  const fromPath = url.pathname.match(/\/api\/exhibitions\/([0-9a-f-]+)/i)?.[1]
+  return fromPath || url.searchParams.get('id') || ''
+}
+
 function isMissingTable(error: unknown) {
   if (!error || typeof error !== 'object') return false
   const code = 'code' in error ? String((error as { code?: string }).code) : ''
@@ -44,7 +50,7 @@ function isMissingTable(error: unknown) {
   return /exhibitions/i.test(message) && /does not exist|undefined_table/i.test(message)
 }
 
-function toExhibition(row: {
+type ExhibitionRow = {
   id: string
   title: string
   description: string
@@ -52,7 +58,9 @@ function toExhibition(row: {
   created_at: string
   cover_media_id: string | null
   cover_url: string | null
-}) {
+}
+
+function toExhibition(row: ExhibitionRow) {
   return {
     id: row.id,
     title: row.title,
@@ -64,16 +72,52 @@ function toExhibition(row: {
   }
 }
 
+async function loadOne(
+  sql: (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown>,
+  id: string,
+) {
+  const rows = (await sql`
+    select e.id, e.title, e.description, e.sort_order, e.created_at,
+           e.cover_media_id, m.url as cover_url
+    from exhibitions e
+    left join media m on m.id = e.cover_media_id
+    where e.id = ${id}
+  `) as ExhibitionRow[]
+  return rows[0] ? toExhibition(rows[0]) : null
+}
+
 export default {
   async fetch(request: Request) {
     try {
+      const id = idOf(request)
       const dbUrl = process.env.DATABASE_URL
       if (!dbUrl) {
-        if (request.method === 'GET') return Response.json({ exhibitions: [] })
+        if (request.method === 'GET' && !id) return Response.json({ exhibitions: [] })
         return Response.json({ error: 'DATABASE_URL no configurada' }, { status: 503 })
       }
       const { neon } = await import('@neondatabase/serverless')
       const sql = neon(dbUrl)
+
+      if (request.method === 'GET' && id) {
+        if (!isUuid(id)) {
+          return Response.json({ error: 'Exposición inválida' }, { status: 400 })
+        }
+        try {
+          const exhibition = await loadOne(sql, id)
+          if (!exhibition) {
+            return Response.json({ error: 'No encontrado' }, { status: 404 })
+          }
+          return Response.json({ exhibition }, { headers: { 'Cache-Control': 'no-store' } })
+        } catch (error) {
+          if (isMissingTable(error)) {
+            return Response.json(
+              { error: 'Falta correr db/011_exhibitions.sql en Neon' },
+              { status: 503 },
+            )
+          }
+          throw error
+        }
+      }
 
       if (request.method === 'GET') {
         try {
@@ -83,7 +127,7 @@ export default {
             from exhibitions e
             left join media m on m.id = e.cover_media_id
             order by e.sort_order, e.created_at desc
-          `) as Parameters<typeof toExhibition>[0][]
+          `) as ExhibitionRow[]
           return Response.json(
             { exhibitions: rows.map(toExhibition) },
             { headers: { 'Cache-Control': 'no-store' } },
@@ -138,6 +182,63 @@ export default {
           return Response.json({
             exhibition: toExhibition({ ...row, cover_url: coverUrl }),
           })
+        } catch (error) {
+          if (isMissingTable(error)) {
+            return Response.json(
+              { error: 'Falta correr db/011_exhibitions.sql en Neon' },
+              { status: 503 },
+            )
+          }
+          throw error
+        }
+      }
+
+      if (request.method === 'PUT' || request.method === 'DELETE') {
+        if (!(await isAuthed(request))) {
+          return Response.json({ error: 'No autorizado' }, { status: 401 })
+        }
+        if (!isUuid(id)) {
+          return Response.json({ error: 'Exposición inválida' }, { status: 400 })
+        }
+        try {
+          if (request.method === 'DELETE') {
+            await sql`delete from exhibitions where id = ${id}`
+            return Response.json({ ok: true })
+          }
+          const body = (await request.json().catch(() => ({}))) as {
+            title?: string
+            description?: string
+            coverMediaId?: string
+          }
+          const title = (body.title ?? '').trim()
+          if (!title) {
+            return Response.json({ error: 'El título es obligatorio' }, { status: 400 })
+          }
+          const cover =
+            typeof body.coverMediaId === 'string' && isUuid(body.coverMediaId)
+              ? body.coverMediaId
+              : undefined
+          const updated = cover
+            ? ((await sql`
+                update exhibitions
+                set title = ${title},
+                    description = ${body.description ?? ''},
+                    cover_media_id = ${cover}
+                where id = ${id}
+                returning id
+              `) as { id: string }[])
+            : ((await sql`
+                update exhibitions
+                set title = ${title},
+                    description = ${body.description ?? ''}
+                where id = ${id}
+                returning id
+              `) as { id: string }[])
+          if (!updated[0]) {
+            return Response.json({ error: 'No encontrado' }, { status: 404 })
+          }
+          const exhibition = await loadOne(sql, id)
+          return Response.json({ exhibition })
         } catch (error) {
           if (isMissingTable(error)) {
             return Response.json(

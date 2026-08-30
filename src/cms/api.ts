@@ -141,7 +141,7 @@ export async function apiListExhibitions() {
 }
 
 export async function apiGetExhibition(id: string) {
-  return request<{ exhibition: Exhibition }>(`/api/exhibitions/${id}`)
+  return request<{ exhibition: Exhibition }>(`/api/exhibitions?id=${id}`)
 }
 
 export async function apiCreateExhibition(payload: {
@@ -159,14 +159,14 @@ export async function apiSaveExhibition(
   id: string,
   payload: { title: string; description?: string; coverMediaId?: string },
 ) {
-  return request<{ exhibition: Exhibition }>(`/api/exhibitions/${id}`, {
+  return request<{ exhibition: Exhibition }>(`/api/exhibitions?id=${id}`, {
     method: 'PUT',
     body: JSON.stringify(payload),
   })
 }
 
 export async function apiDeleteExhibition(id: string) {
-  return request<{ ok: boolean }>(`/api/exhibitions/${id}`, { method: 'DELETE' })
+  return request<{ ok: boolean }>(`/api/exhibitions?id=${id}`, { method: 'DELETE' })
 }
 
 function placementsPath(slug: string, exhibitionId?: string, extra?: string) {
