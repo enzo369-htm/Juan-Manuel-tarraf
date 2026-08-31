@@ -55,7 +55,7 @@ function Lightbox({ item, onClose }: { item: CanvasItem; onClose: () => void }) 
 
   return (
     <div
-      className={`studio-lightbox${ficha ? ' studio-lightbox--ficha' : ''}`}
+      className="studio-lightbox"
       role="dialog"
       aria-modal="true"
       aria-label="Pintura en grande"

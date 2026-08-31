@@ -107,14 +107,6 @@
   cursor: zoom-out;
 }
 
-.studio-lightbox--ficha {
-  grid-template-columns: minmax(11rem, 18rem) minmax(0, 1fr);
-  align-items: center;
-  justify-items: stretch;
-  gap: 2.4rem 3rem;
-  padding: 2.2rem 2.8rem;
-}
-
 .studio-lightbox img {
   display: block;
   max-width: min(96vw, 1600px);
@@ -125,12 +117,12 @@
   cursor: default;
 }
 
-.studio-lightbox--ficha img {
-  max-width: 100%;
-  justify-self: center;
-}
-
 .studio-lightbox__ficha {
+  position: absolute;
+  left: 2.2rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: min(18rem, 26vw);
   margin: 0;
   max-height: 88dvh;
   overflow: auto;
@@ -142,20 +134,13 @@
 }
 
 @media (max-width: 800px) {
-  .studio-lightbox--ficha {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(0, 1fr);
-    align-content: start;
-    gap: 1.4rem;
-    padding: 1.4rem 1.2rem 1.8rem;
-  }
-
   .studio-lightbox__ficha {
+    top: 1.2rem;
+    left: 1.2rem;
+    right: 1.2rem;
+    width: auto;
+    transform: none;
     max-height: 28dvh;
-  }
-
-  .studio-lightbox--ficha img {
-    max-height: 62dvh;
   }
 }
 
