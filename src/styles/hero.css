@@ -241,8 +241,7 @@ html.page-scroll #root {
   justify-content: space-between;
   gap: 1.25rem 2rem;
   flex-wrap: wrap;
-  padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid var(--line);
+  padding: 1.25rem 2.4rem;
 }
 
 .site-nav__brand {
@@ -252,6 +251,7 @@ html.page-scroll #root {
   letter-spacing: -0.01em;
   color: inherit;
   text-decoration: none;
+  padding-right: 0.6rem;
 }
 
 .site-nav__brand:hover {
@@ -269,11 +269,10 @@ html.page-scroll #root {
 }
 
 .site-nav__link {
-  font-family: var(--font-body);
-  font-size: 0.72rem;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-family: var(--font-display);
+  font-size: 1.12rem;
+  font-weight: 400;
+  letter-spacing: -0.01em;
   text-decoration: none;
   color: var(--mute);
 }
