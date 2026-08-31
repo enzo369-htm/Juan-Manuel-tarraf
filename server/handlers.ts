@@ -35,6 +35,38 @@ function queryParam(req: ApiRequest, name: string) {
   return new URL(req.url ?? '', 'http://local').searchParams.get(name) || ''
 }
 
+type PlaceRow = {
+  id: string
+  canvas_id: string | null
+  media_id: string
+  x: number
+  y: number
+  width: number
+  z_index: number
+  url: string
+  ficha?: string | null
+}
+
+async function readPlacementRows(db: ReturnType<typeof sql>, slug: string) {
+  try {
+    return (await db`
+      select p.id, p.canvas_id, p.media_id, p.x, p.y, p.width, p.z_index, p.ficha, m.url
+      from placements p
+      join media m on m.id = p.media_id
+      where p.section_slug = ${slug}
+      order by p.z_index, p.created_at
+    `) as PlaceRow[]
+  } catch {
+    return (await db`
+      select p.id, p.canvas_id, p.media_id, p.x, p.y, p.width, p.z_index, m.url
+      from placements p
+      join media m on m.id = p.media_id
+      where p.section_slug = ${slug}
+      order by p.z_index, p.created_at
+    `) as PlaceRow[]
+  }
+}
+
 function toExhibition(row: {
   id: string
   title: string
@@ -323,13 +355,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
           canvasRows = []
         }
       }
-      const rows = (await db`
-        select p.id, p.canvas_id, p.media_id, p.x, p.y, p.width, p.z_index, m.url
-        from placements p
-        join media m on m.id = p.media_id
-        where p.section_slug = ${placeMatch[1]}
-        order by p.z_index, p.created_at
-      `) as { id: string; canvas_id: string | null; media_id: string; x: number; y: number; width: number; z_index: number; url: string }[]
+      const rows = await readPlacementRows(db, placeMatch[1])
       const toPiece = (row: (typeof rows)[number]) => ({
         id: row.id,
         mediaId: row.media_id,
@@ -338,6 +364,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         y: row.width > 100 ? 8 : row.y,
         width: row.width > 100 ? 24 : row.width,
         z: row.z_index,
+        ficha: row.ficha ?? '',
       })
       const canvases = canvasRows.map((canvas, index) => {
         const kind = canvas.kind === 'text' ? 'text' : 'canvas'
@@ -479,9 +506,9 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
           title?: string
           description?: string
           heightRatio?: number
-          pieces?: { id: string; x: number; y: number; width: number }[]
+          pieces?: { id: string; x: number; y: number; width: number; ficha?: string }[]
         }[]
-        pieces?: { id: string; x: number; y: number; width: number }[]
+        pieces?: { id: string; x: number; y: number; width: number; ficha?: string }[]
         heightRatio?: number
       }>(req)
       const db = sql()
@@ -513,13 +540,25 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         }
         if (canvas.kind === 'text' || !Array.isArray(canvas.pieces)) continue
         for (const piece of canvas.pieces) {
-          await db`
-            update placements
-            set x = ${piece.x},
-                y = ${piece.y},
-                width = ${piece.width}
-            where id = ${piece.id} and section_slug = ${placeMatch[1]}
-          `
+          const ficha = typeof piece.ficha === 'string' ? piece.ficha.slice(0, 2000) : ''
+          try {
+            await db`
+              update placements
+              set x = ${piece.x},
+                  y = ${piece.y},
+                  width = ${piece.width},
+                  ficha = ${ficha}
+              where id = ${piece.id} and section_slug = ${placeMatch[1]}
+            `
+          } catch {
+            await db`
+              update placements
+              set x = ${piece.x},
+                  y = ${piece.y},
+                  width = ${piece.width}
+              where id = ${piece.id} and section_slug = ${placeMatch[1]}
+            `
+          }
         }
       }
       sendJson(res, 200, { ok: true, canvases })

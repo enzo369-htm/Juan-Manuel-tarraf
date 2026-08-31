@@ -195,6 +195,48 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
         </div>
       </header>
 
+      {slug === 'trabajos' ? (
+        <div className={`admin-ficha${selected ? '' : ' is-idle'}`}>
+          <label htmlFor="ficha-tecnica">Ficha técnica</label>
+          <textarea
+            id="ficha-tecnica"
+            className="admin-ficha__text"
+            disabled={!selected}
+            value={
+              selected
+                ? (canvases
+                    .find((canvas) => canvas.id === selected.canvasId)
+                    ?.pieces.find((piece) => piece.id === selected.pieceId)?.ficha ?? '')
+                : ''
+            }
+            maxLength={2000}
+            rows={4}
+            placeholder={
+              selected
+                ? 'Un solo texto. Se ve a la izquierda al abrir la pintura.'
+                : 'Seleccioná una pintura para añadir su ficha.'
+            }
+            onChange={(e) => {
+              if (!selected) return
+              markDirty(
+                canvases.map((item) =>
+                  item.id === selected.canvasId
+                    ? {
+                        ...item,
+                        pieces: item.pieces.map((piece) =>
+                          piece.id === selected.pieceId
+                            ? { ...piece, ficha: e.target.value }
+                            : piece,
+                        ),
+                      }
+                    : item,
+                ),
+              )
+            }}
+          />
+        </div>
+      ) : null}
+
       <div className="admin-canvas-scroll">
         {canvases.length === 0 && (
           <p className="admin-canvas-empty">Todavía no hay nada. Agregá un texto o un lienzo.</p>

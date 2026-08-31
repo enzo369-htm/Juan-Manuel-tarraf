@@ -540,6 +540,43 @@
   outline-offset: 2px;
 }
 
+.admin-ficha {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-width: 36rem;
+  flex-shrink: 0;
+}
+
+.admin-ficha label {
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+
+.admin-ficha__text {
+  width: 100%;
+  min-height: 5.5rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.admin-ficha__text:focus {
+  outline: 1px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.admin-ficha.is-idle .admin-ficha__text {
+  opacity: 0.55;
+}
+
 .admin-panel__head {
   display: flex;
   align-items: flex-end;

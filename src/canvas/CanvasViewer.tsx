@@ -13,7 +13,7 @@ export type CanvasViewerProps = {
 export function CanvasViewer({ items, heightRatio, renderCaption, zoomOnClick = false }: CanvasViewerProps) {
   const positioned = withDefaultPositions(items)
   const ratio = heightRatio ?? 1.2
-  const [openUrl, setOpenUrl] = useState<string | null>(null)
+  const [openItem, setOpenItem] = useState<CanvasItem | null>(null)
 
   if (positioned.length === 0) return null
 
@@ -26,18 +26,20 @@ export function CanvasViewer({ items, heightRatio, renderCaption, zoomOnClick = 
             item={item}
             renderCaption={renderCaption}
             zoomOnClick={zoomOnClick}
-            onOpen={() => setOpenUrl(item.imageUrl)}
+            onOpen={() => setOpenItem(item)}
           />
         ))}
       </div>
-      {zoomOnClick && openUrl ? (
-        <Lightbox src={openUrl} onClose={() => setOpenUrl(null)} />
+      {zoomOnClick && openItem ? (
+        <Lightbox item={openItem} onClose={() => setOpenItem(null)} />
       ) : null}
     </div>
   )
 }
 
-function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
+function Lightbox({ item, onClose }: { item: CanvasItem; onClose: () => void }) {
+  const ficha = item.ficha?.trim() ?? ''
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
@@ -53,17 +55,18 @@ function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
 
   return (
     <div
-      className="studio-lightbox"
+      className={`studio-lightbox${ficha ? ' studio-lightbox--ficha' : ''}`}
       role="dialog"
       aria-modal="true"
       aria-label="Pintura en grande"
       onClick={onClose}
     >
-      <img
-        src={src}
-        alt=""
-        onClick={(event) => event.stopPropagation()}
-      />
+      {ficha ? (
+        <p className="studio-lightbox__ficha" onClick={(event) => event.stopPropagation()}>
+          {ficha}
+        </p>
+      ) : null}
+      <img src={item.imageUrl} alt="" onClick={(event) => event.stopPropagation()} />
     </div>
   )
 }

@@ -60,6 +60,7 @@ type PlaceRow = {
   width: number
   z_index: number
   url: string
+  ficha?: string | null
 }
 
 type CanvasRow = {
@@ -80,6 +81,29 @@ function clip(value: string, max: number) {
   return value.slice(0, max)
 }
 
+async function readPlacementRows(
+  sql: (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown>,
+  slug: string,
+) {
+  try {
+    return (await sql`
+      select p.id, p.canvas_id, p.media_id, p.x, p.y, p.width, p.z_index, p.ficha, m.url
+      from placements p
+      join media m on m.id = p.media_id
+      where p.section_slug = ${slug}
+      order by p.z_index, p.created_at
+    `) as PlaceRow[]
+  } catch {
+    return (await sql`
+      select p.id, p.canvas_id, p.media_id, p.x, p.y, p.width, p.z_index, m.url
+      from placements p
+      join media m on m.id = p.media_id
+      where p.section_slug = ${slug}
+      order by p.z_index, p.created_at
+    `) as PlaceRow[]
+  }
+}
+
 function toPieces(rows: PlaceRow[]) {
   return rows.map((row, i) => {
     const legacy = row.width > 100
@@ -93,6 +117,7 @@ function toPieces(rows: PlaceRow[]) {
       y: legacy ? 4 + (rowI % 6) * 14 : row.y,
       width: legacy ? 24 : row.width,
       z: row.z_index,
+      ficha: row.ficha ?? '',
     }
   })
 }
@@ -149,13 +174,7 @@ async function readCanvases(
     }
   }
 
-  const placeRows = (await sql`
-    select p.id, p.canvas_id, p.media_id, p.x, p.y, p.width, p.z_index, m.url
-    from placements p
-    join media m on m.id = p.media_id
-    where p.section_slug = ${slug}
-    order by p.z_index, p.created_at
-  `) as PlaceRow[]
+  const placeRows = await readPlacementRows(sql, slug)
 
   return canvasRows.map((canvas, index) =>
     toBlock(
@@ -305,6 +324,7 @@ export default {
           x: number
           y: number
           width: number
+          ficha?: string
         }
         type BlockIn = {
           id: string
@@ -394,15 +414,28 @@ export default {
             const x = clampPct(piece.x, 0, 95)
             const y = clampPct(piece.y, 0, 98)
             const width = clampPct(piece.width, 5, 90)
+            const ficha = clip(typeof piece.ficha === 'string' ? piece.ficha : '', 2000)
             if (isUuid(piece.id)) {
-              await sql`
-                update placements
-                set x = ${x},
-                    y = ${y},
-                    width = ${width},
-                    canvas_id = ${canvasId}
-                where id = ${piece.id} and section_slug = ${slug}
-              `
+              try {
+                await sql`
+                  update placements
+                  set x = ${x},
+                      y = ${y},
+                      width = ${width},
+                      canvas_id = ${canvasId},
+                      ficha = ${ficha}
+                  where id = ${piece.id} and section_slug = ${slug}
+                `
+              } catch {
+                await sql`
+                  update placements
+                  set x = ${x},
+                      y = ${y},
+                      width = ${width},
+                      canvas_id = ${canvasId}
+                  where id = ${piece.id} and section_slug = ${slug}
+                `
+              }
               continue
             }
             if (piece.mediaId && isUuid(piece.mediaId)) {

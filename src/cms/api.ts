@@ -115,6 +115,7 @@ export type CanvasPiece = {
   width: number
   z?: number
   mediaId?: string
+  ficha?: string
 }
 
 export type SectionCanvas = {

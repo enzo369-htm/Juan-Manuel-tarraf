@@ -99,6 +99,7 @@ export function SectionView({ section }: Props) {
                       x: piece.x,
                       y: piece.y,
                       width: piece.width,
+                      ficha: piece.ficha,
                     }))}
                   />
                 )

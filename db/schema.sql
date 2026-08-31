@@ -69,6 +69,7 @@ create table if not exists placements (
   y double precision not null default 8,
   width double precision not null default 24,
   z_index int not null default 0,
+  ficha text not null default '',
   created_at timestamptz not null default now()
 );
 

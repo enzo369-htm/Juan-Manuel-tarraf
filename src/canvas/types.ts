@@ -8,6 +8,7 @@ export type CanvasItem = {
   /** Width as % of canvas width (0–100). */
   width: number
   label?: string
+  ficha?: string
   meta?: Record<string, unknown>
 }
 
@@ -18,5 +19,6 @@ export type CanvasItemInput = {
   y?: number | null
   width?: number | null
   label?: string
+  ficha?: string
   meta?: Record<string, unknown>
 }
