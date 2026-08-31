@@ -82,6 +82,41 @@
   height: auto;
 }
 
+.studio-viewer__item.is-zoomable {
+  cursor: zoom-in;
+}
+
+.studio-viewer__zoom {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.studio-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: #fff;
+  cursor: zoom-out;
+}
+
+.studio-lightbox img {
+  display: block;
+  max-width: min(96vw, 1600px);
+  max-height: 92dvh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  cursor: default;
+}
+
 .studio-viewer__caption {
   font-size: 0.85rem;
   color: var(--mute);

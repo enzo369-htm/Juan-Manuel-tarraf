@@ -92,6 +92,7 @@ export function SectionView({ section }: Props) {
                   <CanvasViewer
                     key={block.id}
                     heightRatio={block.heightRatio}
+                    zoomOnClick={section.id === 'trabajos'}
                     items={block.pieces.map((piece) => ({
                       id: piece.id,
                       imageUrl: piece.src,
