@@ -36,18 +36,22 @@ export function TextsIndex() {
       <SiteNav />
 
       <div className="texts-index">
-        <p className="texts-index__kicker">textos</p>
+        <header className="texts-index__head">
+          <h1 className="texts-index__kicker">Textos</h1>
+        </header>
         {error && <p className="section-view__note">{error}</p>}
         {ready && !error && texts.length === 0 && (
           <p className="section-view__note">Todavía no hay textos publicados.</p>
         )}
         <ul className="texts-index__list">
           {texts.map((entry) => (
-            <li key={entry.id}>
-              <Link className="texts-index__item" to={`/textos/${entry.id}`}>
-                <h2>{entry.title}</h2>
-                <time dateTime={entry.created_at}>{formatDate(entry.created_at)}</time>
-                {entry.description && <p>{entry.description}</p>}
+            <li key={entry.id} className="texts-index__item">
+              <Link className="texts-index__card" to={`/textos/${entry.id}`}>
+                <span className="texts-index__copy">
+                  <h2>{entry.title}</h2>
+                  <time dateTime={entry.created_at}>{formatDate(entry.created_at)}</time>
+                  {entry.description ? <p className="texts-index__excerpt">{entry.description}</p> : null}
+                </span>
                 <span className="texts-index__more">Leer →</span>
               </Link>
             </li>
