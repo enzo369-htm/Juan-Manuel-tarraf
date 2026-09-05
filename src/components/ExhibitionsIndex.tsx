@@ -49,8 +49,8 @@ export function ExhibitionsIndex() {
                 <span className="expos-index__copy">
                   <h2>{entry.title}</h2>
                   {entry.description ? <p className="expos-index__excerpt">{entry.description}</p> : null}
-                  <span className="expos-index__more">Ver →</span>
                 </span>
+                <span className="expos-index__more">Ver →</span>
               </Link>
             </li>
           ))}
