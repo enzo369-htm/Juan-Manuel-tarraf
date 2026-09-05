@@ -394,9 +394,9 @@ html.page-scroll #root {
 }
 
 .expos-index {
-  width: min(68rem, calc(100% - 3rem));
-  margin: 0 auto;
-  padding: 1.6rem 0 5rem;
+  width: 100%;
+  margin: 0;
+  padding: 1.6rem 2.4rem 5rem;
 }
 
 .expos-index__head {
@@ -481,8 +481,7 @@ html.page-scroll #root {
 
 @media (max-width: 800px) {
   .expos-index {
-    width: calc(100% - 1.6rem);
-    padding: 0.8rem 0 3.4rem;
+    padding: 0.8rem 2.4rem 3.4rem;
   }
 
   .expos-index__card {
