@@ -377,7 +377,7 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
                 className="admin-series-text__title"
                 value={canvas.title ?? ''}
                 maxLength={200}
-                placeholder="Título"
+                placeholder={exhibitionId ? 'Título de sección (opcional)' : 'Título'}
                 onChange={(e) =>
                   markDirty(
                     canvases.map((item) =>

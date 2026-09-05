@@ -4,6 +4,11 @@ import { CanvasViewer } from '../canvas/CanvasViewer'
 import { apiGetExhibition, apiGetPlacements, type SectionCanvas } from '../cms/api'
 import { SiteNav } from './SiteNav'
 
+function sameTitle(a?: string, b?: string) {
+  const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ')
+  return Boolean(a && b && normalize(a) === normalize(b))
+}
+
 export function ExhibitionDetail() {
   const { exhibitionId } = useParams()
   const [title, setTitle] = useState('')
@@ -58,14 +63,17 @@ export function ExhibitionDetail() {
           <Link to="/exposiciones">Volver a exposiciones</Link>
         </p>
       ) : (
-        <div className="section-view__body">
+        <div className="section-view__body expos-detail">
           {title ? <h1 className="expos-detail__title">{title}</h1> : null}
-          {canvases.map((block) => {
+          {canvases.map((block, index) => {
             if (block.kind === 'text') {
-              if (!block.title && !block.description) return null
+              const isFirstText = !canvases.slice(0, index).some((item) => item.kind === 'text')
+              const showHeading =
+                Boolean(block.title) && !isFirstText && !sameTitle(block.title, title)
+              if (!showHeading && !block.description) return null
               return (
                 <div key={block.id} className="series-intro">
-                  {block.title ? <h2 className="series-intro__title">{block.title}</h2> : null}
+                  {showHeading ? <h2 className="series-intro__title">{block.title}</h2> : null}
                   {block.description ? (
                     <p className="series-intro__text">{block.description}</p>
                   ) : null}
