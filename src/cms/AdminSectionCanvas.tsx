@@ -315,6 +315,7 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
       <div className="admin-canvas-scroll">
         {exhibitionId ? (
           <div className="admin-expo-meta">
+            <p className="admin-bar__kicker">Vidriera</p>
             <label className="admin-login__label">
               Título
               <input
@@ -324,6 +325,20 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
                 onChange={(e) => {
                   setTitle(e.target.value)
                   setHeading(e.target.value || 'Exposición')
+                  markMetaDirty()
+                }}
+              />
+            </label>
+            <label className="admin-login__label">
+              Extracto
+              <textarea
+                className="admin-series-text__body"
+                value={description}
+                maxLength={500}
+                rows={4}
+                placeholder="Texto corto que se ve junto a la portada en el muestrario."
+                onChange={(e) => {
+                  setDescription(e.target.value)
                   markMetaDirty()
                 }}
               />
@@ -352,6 +367,9 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
               </label>
             </div>
           </div>
+        ) : null}
+        {exhibitionId ? (
+          <p className="admin-bar__kicker admin-expo-inside">Dentro de la muestra</p>
         ) : null}
         {canvases.length === 0 && (
           <p className="admin-canvas-empty">

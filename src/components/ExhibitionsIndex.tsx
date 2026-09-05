@@ -32,19 +32,25 @@ export function ExhibitionsIndex() {
       <SiteNav />
 
       <div className="expos-index">
-        <p className="expos-index__kicker">exposiciones</p>
+        <header className="expos-index__head">
+          <h1 className="expos-index__kicker">Exposiciones</h1>
+        </header>
         {error && <p className="section-view__note">{error}</p>}
         {ready && !error && exhibitions.length === 0 && (
           <p className="section-view__note">Todavía no hay exposiciones publicadas.</p>
         )}
-        <ul className="expos-index__grid">
+        <ul className="expos-index__list">
           {exhibitions.map((entry) => (
-            <li key={entry.id}>
+            <li key={entry.id} className="expos-index__item">
               <Link className="expos-index__card" to={`/exposiciones/${entry.id}`}>
                 <span className="expos-index__cover">
                   {entry.coverUrl ? <img src={entry.coverUrl} alt="" /> : <span aria-hidden />}
                 </span>
-                <h2>{entry.title}</h2>
+                <span className="expos-index__copy">
+                  <h2>{entry.title}</h2>
+                  {entry.description ? <p className="expos-index__excerpt">{entry.description}</p> : null}
+                  <span className="expos-index__more">Ver →</span>
+                </span>
               </Link>
             </li>
           ))}
