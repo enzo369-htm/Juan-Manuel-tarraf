@@ -734,6 +734,23 @@
   color: var(--mute);
 }
 
+.admin-expo-meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 10rem;
+  gap: 1.4rem 1.6rem;
+  align-items: start;
+  padding-bottom: 1.4rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.admin-expo-meta .admin-login__label {
+  max-width: 40rem;
+}
+
+.admin-expo-meta .admin-series-text__title {
+  margin-top: 0.35rem;
+}
+
 .admin-expo-cover {
   display: flex;
   flex-direction: column;
@@ -769,10 +786,7 @@
 }
 
 .admin-expo-list li {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.55rem;
-  align-items: center;
+  display: block;
 }
 
 .admin-expo-list__item {
@@ -787,6 +801,7 @@
   color: inherit;
   font: inherit;
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
 }
 
@@ -886,5 +901,9 @@
 
   .admin-bar__actions {
     flex-wrap: wrap;
+  }
+
+  .admin-expo-meta {
+    grid-template-columns: 1fr;
   }
 }

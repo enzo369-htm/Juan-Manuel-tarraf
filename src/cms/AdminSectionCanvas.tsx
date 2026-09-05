@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { FreeCanvas } from '../canvas/FreeCanvas'
 import { getSection } from '../data/sections'
 import {
   apiAddCanvas,
   apiDeleteCanvas,
+  apiDeleteExhibition,
   apiGetExhibition,
   apiGetPlacements,
+  apiSaveExhibition,
   apiSavePlacements,
   apiUploadMedia,
   type CanvasPiece,
@@ -26,7 +28,12 @@ type Props = {
 
 export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
   const section = getSection(slug)
+  const navigate = useNavigate()
   const [heading, setHeading] = useState(section?.label ?? slug)
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [coverUrl, setCoverUrl] = useState('')
+  const [coverMediaId, setCoverMediaId] = useState('')
   const [canvases, setCanvases] = useState<SectionCanvas[]>([])
   const [selected, setSelected] = useState<{ canvasId: string; pieceId: string } | null>(null)
   const [status, setStatus] = useState('Listo')
@@ -48,10 +55,20 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
   useEffect(() => {
     if (!exhibitionId) {
       setHeading(section?.label ?? slug)
+      setTitle('')
+      setDescription('')
+      setCoverUrl('')
+      setCoverMediaId('')
       return
     }
     void apiGetExhibition(exhibitionId)
-      .then((data) => setHeading(data.exhibition.title))
+      .then((data) => {
+        setHeading(data.exhibition.title)
+        setTitle(data.exhibition.title)
+        setDescription(data.exhibition.description)
+        setCoverUrl(data.exhibition.coverUrl ?? '')
+        setCoverMediaId(data.exhibition.coverMediaId ?? '')
+      })
       .catch(() => setHeading(section?.label ?? slug))
   }, [exhibitionId, section?.label, slug])
 
@@ -67,10 +84,30 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
     setStatus('Sin guardar')
   }
 
+  const markMetaDirty = () => {
+    setDirty(true)
+    setStatus('Sin guardar')
+  }
+
   const onSave = async () => {
+    if (exhibitionId && !title.trim()) {
+      setStatus('El título es obligatorio')
+      return
+    }
     setSaving(true)
     setStatus('Guardando…')
     try {
+      if (exhibitionId) {
+        const savedExpo = await apiSaveExhibition(exhibitionId, {
+          title: title.trim(),
+          description,
+          ...(coverMediaId ? { coverMediaId } : {}),
+        })
+        setHeading(savedExpo.exhibition.title)
+        setTitle(savedExpo.exhibition.title)
+        setCoverUrl(savedExpo.exhibition.coverUrl ?? coverUrl)
+        setCoverMediaId(savedExpo.exhibition.coverMediaId ?? coverMediaId)
+      }
       const saved = await apiSavePlacements(slug, canvases, exhibitionId)
       if (saved.canvases) setCanvases(saved.canvases)
       setDirty(false)
@@ -79,6 +116,35 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
       setStatus(error instanceof Error ? error.message : 'Error al guardar')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const onUploadCover = async (file: File) => {
+    setUploading(true)
+    setStatus('Subiendo portada…')
+    try {
+      const uploaded = await apiUploadMedia(file)
+      if (!uploaded.id || !uploaded.url) throw new Error('La subida no devolvió URL')
+      setCoverMediaId(uploaded.id)
+      setCoverUrl(uploaded.url)
+      markMetaDirty()
+      setStatus('Portada lista — guardá para publicar')
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Error al subir')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const onDeleteExhibition = async () => {
+    if (!exhibitionId) return
+    if (!window.confirm('¿Quitar esta exposición y todas sus fotos?')) return
+    setStatus('Quitando…')
+    try {
+      await apiDeleteExhibition(exhibitionId)
+      navigate('/admin/exposiciones')
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Error al quitar')
     }
   }
 
@@ -158,9 +224,18 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
         </div>
         <div className="admin-bar__actions">
           {exhibitionId ? (
-            <Link className="admin-bar__btn" to="/admin/exposiciones">
-              Volver
-            </Link>
+            <>
+              <Link className="admin-bar__btn" to="/admin/exposiciones">
+                Volver
+              </Link>
+              <button
+                type="button"
+                className="admin-bar__btn admin-bar__btn--danger"
+                onClick={() => void onDeleteExhibition()}
+              >
+                Quitar
+              </button>
+            </>
           ) : null}
           <span className={`admin-bar__status${dirty ? ' is-dirty' : ''}`}>{status}</span>
           {selected && (
@@ -238,8 +313,52 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
       ) : null}
 
       <div className="admin-canvas-scroll">
+        {exhibitionId ? (
+          <div className="admin-expo-meta">
+            <label className="admin-login__label">
+              Título
+              <input
+                className="admin-series-text__title"
+                value={title}
+                maxLength={200}
+                onChange={(e) => {
+                  setTitle(e.target.value)
+                  setHeading(e.target.value || 'Exposición')
+                  markMetaDirty()
+                }}
+              />
+            </label>
+            <div className="admin-expo-cover">
+              <div className="admin-expo-cover__frame">
+                {coverUrl ? <img src={coverUrl} alt="" /> : <span>Sin portada</span>}
+              </div>
+              <label className="admin-bar__btn">
+                {uploading && !fileForCanvas.current
+                  ? 'Subiendo…'
+                  : coverUrl
+                    ? 'Cambiar portada'
+                    : 'Subir portada'}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  hidden
+                  disabled={uploading}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) void onUploadCover(file)
+                    e.target.value = ''
+                  }}
+                />
+              </label>
+            </div>
+          </div>
+        ) : null}
         {canvases.length === 0 && (
-          <p className="admin-canvas-empty">Todavía no hay nada. Agregá un texto o un lienzo.</p>
+          <p className="admin-canvas-empty">
+            {exhibitionId
+              ? 'Agregá un texto o un lienzo para el contenido de la muestra.'
+              : 'Todavía no hay nada. Agregá un texto o un lienzo.'}
+          </p>
         )}
         {canvases.map((canvas, index) =>
           blockKind(canvas) === 'text' ? (
