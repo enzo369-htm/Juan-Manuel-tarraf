@@ -425,8 +425,9 @@ html.page-scroll #root {
 
 .expos-index__card {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(14rem, 0.8fr);
-  gap: 1.8rem 2.6rem;
+  width: 85%;
+  grid-template-columns: minmax(0, 1.2fr) minmax(12rem, 0.8fr);
+  gap: 1.5rem 2.2rem;
   align-items: stretch;
   color: inherit;
   text-decoration: none;
