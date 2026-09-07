@@ -4,8 +4,8 @@
   --mute: #6b6862;
   --line: rgba(22, 21, 19, 0.12);
   --accent: #161513;
-  --font-display: 'Instrument Serif', Georgia, serif;
-  --font-body: 'DM Sans', 'Segoe UI', sans-serif;
+  --font-display: Arial, Helvetica, sans-serif;
+  --font-body: Arial, Helvetica, sans-serif;
 }
 
 *,
@@ -673,7 +673,7 @@ a.contact__row:focus-visible {
 .texts-index__excerpt {
   margin: 0.75rem 0 0;
   font-family: var(--font-display);
-  font-size: 0.98rem;
+  font-size: 10pt;
   line-height: 1.6;
   color: var(--ink);
 }
@@ -735,5 +735,6 @@ a.contact__row:focus-visible {
   margin-top: 2.2rem;
   text-align: left;
   white-space: pre-wrap;
+  font-size: 10pt;
   line-height: 1.7;
 }
