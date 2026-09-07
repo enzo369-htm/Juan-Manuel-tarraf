@@ -605,6 +605,10 @@ a.contact__row:focus-visible {
   text-align: left;
 }
 
+.expos-detail .series-intro__text {
+  font-size: 10pt;
+}
+
 .texts-index {
   width: 100%;
   margin: 0;
