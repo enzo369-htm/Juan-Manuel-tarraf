@@ -663,6 +663,29 @@
   min-height: 5.5rem;
 }
 
+.admin-contact {
+  display: flex;
+  flex-direction: column;
+  gap: 1.8rem;
+  max-width: 32rem;
+}
+
+.admin-contact__block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.admin-contact__block .admin-login__label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.admin-contact__block .admin-login__input {
+  width: 100%;
+}
+
 .admin-panel--texts {
   overflow-x: hidden;
   overflow-y: auto;

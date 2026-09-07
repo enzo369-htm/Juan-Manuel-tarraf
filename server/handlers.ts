@@ -35,6 +35,12 @@ function queryParam(req: ApiRequest, name: string) {
   return new URL(req.url ?? '', 'http://local').searchParams.get(name) || ''
 }
 
+async function ensureContactColumns(db: ReturnType<typeof sql>) {
+  await db`alter table section_copy add column if not exists instagram_handle text not null default ''`
+  await db`alter table section_copy add column if not exists instagram_url text not null default ''`
+  await db`alter table section_copy add column if not exists email text not null default ''`
+}
+
 type PlaceRow = {
   id: string
   canvas_id: string | null
@@ -253,28 +259,74 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
     }
 
     const copyMatch = path.match(/^\/api\/copy\/([a-z]+)$/)
+    const toCopy = (
+      slug: string,
+      row?: {
+        slug: string
+        body: string
+        portrait_url?: string | null
+        instagram_handle?: string | null
+        instagram_url?: string | null
+        email?: string | null
+      },
+    ) => ({
+      slug: row?.slug ?? slug,
+      body: row?.body ?? '',
+      portraitUrl: row?.portrait_url ?? '',
+      instagramHandle: row?.instagram_handle ?? '',
+      instagramUrl: row?.instagram_url ?? '',
+      email: row?.email ?? '',
+    })
     if (copyMatch && method === 'GET') {
       if (!hasDatabase()) {
-        sendJson(res, 200, { slug: copyMatch[1], body: '', portraitUrl: '' })
+        sendJson(res, 200, toCopy(copyMatch[1]))
         return
       }
       try {
         const rows = (await sql()`
-          select section_slug as slug, body, portrait_url
+          select section_slug as slug, body, portrait_url, instagram_handle, instagram_url, email
           from section_copy
           where section_slug = ${copyMatch[1]}
-        `) as { slug: string; body: string; portrait_url: string | null }[]
-        const row = rows[0]
-        sendJson(res, 200, {
-          slug: row?.slug ?? copyMatch[1],
-          body: row?.body ?? '',
-          portraitUrl: row?.portrait_url ?? '',
-        })
+        `) as {
+          slug: string
+          body: string
+          portrait_url: string | null
+          instagram_handle: string | null
+          instagram_url: string | null
+          email: string | null
+        }[]
+        sendJson(res, 200, toCopy(copyMatch[1], rows[0]))
       } catch {
-        const rows = (await sql()`
-          select section_slug as slug, body from section_copy where section_slug = ${copyMatch[1]}
-        `) as { slug: string; body: string }[]
-        sendJson(res, 200, { slug: copyMatch[1], body: rows[0]?.body ?? '', portraitUrl: '' })
+        try {
+          await ensureContactColumns(sql())
+          const rows = (await sql()`
+            select section_slug as slug, body, portrait_url, instagram_handle, instagram_url, email
+            from section_copy
+            where section_slug = ${copyMatch[1]}
+          `) as {
+            slug: string
+            body: string
+            portrait_url: string | null
+            instagram_handle: string | null
+            instagram_url: string | null
+            email: string | null
+          }[]
+          sendJson(res, 200, toCopy(copyMatch[1], rows[0]))
+        } catch {
+          try {
+            const rows = (await sql()`
+              select section_slug as slug, body, portrait_url
+              from section_copy
+              where section_slug = ${copyMatch[1]}
+            `) as { slug: string; body: string; portrait_url: string | null }[]
+            sendJson(res, 200, toCopy(copyMatch[1], rows[0]))
+          } catch {
+            const rows = (await sql()`
+              select section_slug as slug, body from section_copy where section_slug = ${copyMatch[1]}
+            `) as { slug: string; body: string }[]
+            sendJson(res, 200, toCopy(copyMatch[1], rows[0]))
+          }
+        }
       }
       return
     }
@@ -285,27 +337,68 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         sendJson(res, 503, { error: 'DATABASE_URL no configurada' })
         return
       }
-      const body = await readJson<{ body?: string; portraitUrl?: string }>(req)
-      const text = body.body ?? ''
+      const body = await readJson<{
+        body?: string
+        portraitUrl?: string
+        instagramHandle?: string
+        instagramUrl?: string
+        email?: string
+      }>(req)
       const db = sql()
+      const slug = copyMatch[1]
+      if (slug === 'contacto') {
+        const instagramHandle = typeof body.instagramHandle === 'string' ? body.instagramHandle.trim() : ''
+        const instagramUrl = typeof body.instagramUrl === 'string' ? body.instagramUrl.trim() : ''
+        const email = typeof body.email === 'string' ? body.email.trim() : ''
+        const saveContact = async () => {
+          await db`
+            insert into section_copy (section_slug, body, instagram_handle, instagram_url, email)
+            values (${slug}, '', ${instagramHandle}, ${instagramUrl}, ${email})
+            on conflict (section_slug) do update
+            set instagram_handle = excluded.instagram_handle,
+                instagram_url = excluded.instagram_url,
+                email = excluded.email
+          `
+        }
+        try {
+          await saveContact()
+        } catch {
+          try {
+            await ensureContactColumns(db)
+            await saveContact()
+          } catch {
+            sendJson(res, 503, { error: 'Falta correr db/013_contact.sql en Neon' })
+            return
+          }
+        }
+        sendJson(res, 200, toCopy(slug, {
+          slug,
+          body: '',
+          instagram_handle: instagramHandle,
+          instagram_url: instagramUrl,
+          email,
+        }))
+        return
+      }
+      const text = body.body ?? ''
       const portraitUrl =
-        copyMatch[1] === 'bio' && typeof body.portraitUrl === 'string' ? body.portraitUrl : null
+        slug === 'bio' && typeof body.portraitUrl === 'string' ? body.portraitUrl : null
       if (portraitUrl !== null) {
         await db`
           insert into section_copy (section_slug, body, portrait_url)
-          values (${copyMatch[1]}, ${text}, ${portraitUrl})
+          values (${slug}, ${text}, ${portraitUrl})
           on conflict (section_slug) do update
           set body = excluded.body, portrait_url = excluded.portrait_url
         `
-        sendJson(res, 200, { slug: copyMatch[1], body: text, portraitUrl })
+        sendJson(res, 200, toCopy(slug, { slug, body: text, portrait_url: portraitUrl }))
         return
       }
       await db`
         insert into section_copy (section_slug, body)
-        values (${copyMatch[1]}, ${text})
+        values (${slug}, ${text})
         on conflict (section_slug) do update set body = excluded.body
       `
-      sendJson(res, 200, { slug: copyMatch[1], body: text, portraitUrl: '' })
+      sendJson(res, 200, toCopy(slug, { slug, body: text }))
       return
     }
 

@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes, useParams } from 'react-router-dom'
+import { AdminContact } from './AdminContact'
 import { AdminCopy } from './AdminCopy'
 import { AdminEditor } from './AdminEditor'
 import { AdminExhibitions } from './AdminExhibitions'
@@ -23,7 +24,7 @@ export function AdminPage() {
           <Route path="hero" element={<AdminEditor />} />
           <Route path="bio" element={<AdminCopy slug="bio" />} />
           <Route path="textos" element={<AdminTexts />} />
-          <Route path="contacto" element={<AdminCopy slug="contacto" />} />
+          <Route path="contacto" element={<AdminContact />} />
           <Route path="trabajos" element={<AdminSectionCanvas slug="trabajos" />} />
           <Route path="exposiciones/:id" element={<AdminExhibitionCanvas />} />
           <Route path="exposiciones" element={<AdminExhibitions />} />

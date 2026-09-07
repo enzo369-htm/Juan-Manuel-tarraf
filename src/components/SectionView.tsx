@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { CanvasViewer } from '../canvas/CanvasViewer'
 import { apiGetCopy, apiGetPlacements, type SectionCanvas } from '../cms/api'
 import type { Section } from '../data/sections'
+import { ContactView } from './ContactView'
 import { SiteNav } from './SiteNav'
 
 const CANVAS_SECTIONS = new Set(['trabajos', 'exposiciones', 'archivos'])
@@ -13,6 +14,9 @@ type Props = {
 export function SectionView({ section }: Props) {
   const [body, setBody] = useState('')
   const [portraitUrl, setPortraitUrl] = useState('')
+  const [instagramHandle, setInstagramHandle] = useState('')
+  const [instagramUrl, setInstagramUrl] = useState('')
+  const [email, setEmail] = useState('')
   const [canvases, setCanvases] = useState<SectionCanvas[]>([])
   const [ready, setReady] = useState(false)
   const [loadedId, setLoadedId] = useState(section.id)
@@ -22,6 +26,9 @@ export function SectionView({ section }: Props) {
     setReady(false)
     setBody('')
     setPortraitUrl('')
+    setInstagramHandle('')
+    setInstagramUrl('')
+    setEmail('')
     setCanvases([])
   }
 
@@ -33,11 +40,17 @@ export function SectionView({ section }: Props) {
         if (cancelled) return
         setBody(data.body)
         setPortraitUrl(data.portraitUrl ?? '')
+        setInstagramHandle(data.instagramHandle ?? '')
+        setInstagramUrl(data.instagramUrl ?? '')
+        setEmail(data.email ?? '')
       })
       .catch(() => {
         if (cancelled) return
         setBody('')
         setPortraitUrl('')
+        setInstagramHandle('')
+        setInstagramUrl('')
+        setEmail('')
       })
 
     const placements = CANVAS_SECTIONS.has(section.id)
@@ -60,9 +73,13 @@ export function SectionView({ section }: Props) {
   }, [section.id])
 
   const isBio = section.id === 'bio'
+  const isContact = section.id === 'contacto'
 
   return (
-    <section className="section-view" aria-label={section.label}>
+    <section
+      className={`section-view${isContact ? ' section-view--contact' : ''}`}
+      aria-label={section.label}
+    >
       <SiteNav />
 
       {!ready ? null : isBio ? (
@@ -72,6 +89,12 @@ export function SectionView({ section }: Props) {
             {portraitUrl ? <img src={portraitUrl} alt="" /> : <span aria-hidden />}
           </div>
         </div>
+      ) : isContact ? (
+        <ContactView
+          instagramHandle={instagramHandle}
+          instagramUrl={instagramUrl}
+          email={email}
+        />
       ) : (
         <div className="section-view__body">
           {CANVAS_SECTIONS.has(section.id)

@@ -1,6 +1,15 @@
 const COOKIE = 'jt_admin'
 const COPY_SLUGS = new Set(['bio', 'textos', 'contacto'])
 
+type CopyRow = {
+  slug: string
+  body: string
+  portrait_url?: string | null
+  instagram_handle?: string | null
+  instagram_url?: string | null
+  email?: string | null
+}
+
 function cookies(header: string) {
   const out: Record<string, string> = {}
   for (const part of header.split(';')) {
@@ -38,6 +47,21 @@ function slugOf(request: Request) {
   return url.pathname.match(/\/api\/copy\/([a-z]+)/)?.[1] || url.searchParams.get('slug') || ''
 }
 
+function toCopy(slug: string, row?: CopyRow) {
+  return {
+    slug: row?.slug ?? slug,
+    body: row?.body ?? '',
+    portraitUrl: row?.portrait_url ?? '',
+    instagramHandle: row?.instagram_handle ?? '',
+    instagramUrl: row?.instagram_url ?? '',
+    email: row?.email ?? '',
+  }
+}
+
+function asText(value: unknown) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
 export default {
   async fetch(request: Request) {
     try {
@@ -48,32 +72,51 @@ export default {
 
       const dbUrl = process.env.DATABASE_URL
       if (!dbUrl) {
-        if (request.method === 'GET') return Response.json({ slug, body: '', portraitUrl: '' })
+        if (request.method === 'GET') return Response.json(toCopy(slug))
         return Response.json({ error: 'DATABASE_URL no configurada' }, { status: 503 })
       }
 
       const { neon } = await import('@neondatabase/serverless')
       const sql = neon(dbUrl)
 
-      const toCopy = (row?: { slug: string; body: string; portrait_url?: string | null }) => ({
-        slug: row?.slug ?? slug,
-        body: row?.body ?? '',
-        portraitUrl: row?.portrait_url ?? '',
-      })
+      const ensureContactColumns = async () => {
+        await sql`alter table section_copy add column if not exists instagram_handle text not null default ''`
+        await sql`alter table section_copy add column if not exists instagram_url text not null default ''`
+        await sql`alter table section_copy add column if not exists email text not null default ''`
+      }
 
       if (request.method === 'GET') {
         try {
           const rows = (await sql`
-            select section_slug as slug, body, portrait_url
+            select section_slug as slug, body, portrait_url, instagram_handle, instagram_url, email
             from section_copy
             where section_slug = ${slug}
-          `) as { slug: string; body: string; portrait_url: string | null }[]
-          return Response.json(toCopy(rows[0]))
+          `) as CopyRow[]
+          return Response.json(toCopy(slug, rows[0]))
         } catch {
-          const rows = (await sql`
-            select section_slug as slug, body from section_copy where section_slug = ${slug}
-          `) as { slug: string; body: string }[]
-          return Response.json({ slug, body: rows[0]?.body ?? '', portraitUrl: '' })
+          try {
+            await ensureContactColumns()
+            const rows = (await sql`
+              select section_slug as slug, body, portrait_url, instagram_handle, instagram_url, email
+              from section_copy
+              where section_slug = ${slug}
+            `) as CopyRow[]
+            return Response.json(toCopy(slug, rows[0]))
+          } catch {
+            try {
+              const rows = (await sql`
+                select section_slug as slug, body, portrait_url
+                from section_copy
+                where section_slug = ${slug}
+              `) as CopyRow[]
+              return Response.json(toCopy(slug, rows[0]))
+            } catch {
+              const rows = (await sql`
+                select section_slug as slug, body from section_copy where section_slug = ${slug}
+              `) as CopyRow[]
+              return Response.json(toCopy(slug, rows[0]))
+            }
+          }
         }
       }
 
@@ -84,7 +127,47 @@ export default {
         const payload = (await request.json().catch(() => ({}))) as {
           body?: string
           portraitUrl?: string
+          instagramHandle?: string
+          instagramUrl?: string
+          email?: string
         }
+
+        if (slug === 'contacto') {
+          const instagramHandle = asText(payload.instagramHandle)
+          const instagramUrl = asText(payload.instagramUrl)
+          const email = asText(payload.email)
+          const saveContact = async () => {
+            await sql`
+              insert into section_copy (section_slug, body, instagram_handle, instagram_url, email)
+              values (${slug}, '', ${instagramHandle}, ${instagramUrl}, ${email})
+              on conflict (section_slug) do update
+              set instagram_handle = excluded.instagram_handle,
+                  instagram_url = excluded.instagram_url,
+                  email = excluded.email
+            `
+          }
+          try {
+            await saveContact()
+          } catch {
+            try {
+              await ensureContactColumns()
+              await saveContact()
+            } catch {
+              return Response.json(
+                { error: 'Falta correr db/013_contact.sql en Neon' },
+                { status: 503 },
+              )
+            }
+          }
+          return Response.json(toCopy(slug, {
+            slug,
+            body: '',
+            instagram_handle: instagramHandle,
+            instagram_url: instagramUrl,
+            email,
+          }))
+        }
+
         const text = typeof payload.body === 'string' ? payload.body : ''
         const portraitUrl =
           slug === 'bio' && typeof payload.portraitUrl === 'string' ? payload.portraitUrl : null
@@ -97,7 +180,7 @@ export default {
               on conflict (section_slug) do update
               set body = excluded.body, portrait_url = excluded.portrait_url
             `
-            return Response.json({ slug, body: text, portraitUrl })
+            return Response.json(toCopy(slug, { slug, body: text, portrait_url: portraitUrl }))
           } catch {
             return Response.json(
               { error: 'Falta correr db/008_bio_portrait.sql en Neon' },
@@ -113,13 +196,13 @@ export default {
         `
         try {
           const rows = (await sql`
-            select section_slug as slug, body, portrait_url
+            select section_slug as slug, body, portrait_url, instagram_handle, instagram_url, email
             from section_copy
             where section_slug = ${slug}
-          `) as { slug: string; body: string; portrait_url: string | null }[]
-          return Response.json(toCopy(rows[0] ?? { slug, body: text, portrait_url: '' }))
+          `) as CopyRow[]
+          return Response.json(toCopy(slug, rows[0] ?? { slug, body: text }))
         } catch {
-          return Response.json({ slug, body: text, portraitUrl: '' })
+          return Response.json(toCopy(slug, { slug, body: text }))
         }
       }
 

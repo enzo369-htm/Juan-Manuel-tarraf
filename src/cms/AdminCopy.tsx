@@ -29,7 +29,10 @@ export function AdminCopy({ slug }: Props) {
   const onSave = async () => {
     setStatus('Guardando…')
     try {
-      await apiSaveCopy(slug, body, isBio ? portraitUrl : undefined)
+      await apiSaveCopy(slug, {
+        body,
+        ...(isBio ? { portraitUrl } : {}),
+      })
       setStatus('Guardado')
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Error')

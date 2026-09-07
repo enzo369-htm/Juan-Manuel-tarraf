@@ -56,17 +56,32 @@ export async function apiResetHero(): Promise<HeroLayout> {
   return request<HeroLayout>('/api/hero/reset', { method: 'POST' })
 }
 
-export async function apiGetCopy(slug: string) {
-  return request<{ slug: string; body: string; portraitUrl?: string }>(`/api/copy/${slug}`)
+export type SectionCopy = {
+  slug: string
+  body: string
+  portraitUrl?: string
+  instagramHandle?: string
+  instagramUrl?: string
+  email?: string
 }
 
-export async function apiSaveCopy(slug: string, body: string, portraitUrl?: string) {
-  return request<{ slug: string; body: string; portraitUrl?: string }>(`/api/copy/${slug}`, {
+export async function apiGetCopy(slug: string) {
+  return request<SectionCopy>(`/api/copy/${slug}`)
+}
+
+export async function apiSaveCopy(
+  slug: string,
+  payload: {
+    body?: string
+    portraitUrl?: string
+    instagramHandle?: string
+    instagramUrl?: string
+    email?: string
+  },
+) {
+  return request<SectionCopy>(`/api/copy/${slug}`, {
     method: 'PUT',
-    body: JSON.stringify({
-      body,
-      ...(portraitUrl !== undefined ? { portraitUrl } : {}),
-    }),
+    body: JSON.stringify(payload),
   })
 }
 

@@ -11,7 +11,8 @@ import { TextsIndex } from './components/TextsIndex'
 function PageScrollMode() {
   const { pathname } = useLocation()
   useLayoutEffect(() => {
-    const allowScroll = pathname !== '/' && !pathname.startsWith('/admin')
+    const allowScroll =
+      pathname !== '/' && pathname !== '/contacto' && !pathname.startsWith('/admin')
     document.documentElement.classList.toggle('page-scroll', allowScroll)
     return () => document.documentElement.classList.remove('page-scroll')
   }, [pathname])

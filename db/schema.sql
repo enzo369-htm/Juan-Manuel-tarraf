@@ -76,7 +76,10 @@ create table if not exists placements (
 create table if not exists section_copy (
   section_slug text primary key references sections (slug) on delete cascade,
   body text not null default '',
-  portrait_url text
+  portrait_url text,
+  instagram_handle text not null default '',
+  instagram_url text not null default '',
+  email text not null default ''
 );
 
 create table if not exists texts (

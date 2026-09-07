@@ -393,6 +393,79 @@ html.page-scroll #root {
   line-height: 1.45;
 }
 
+.contact {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 1.5rem 3.5rem;
+}
+
+.section-view--contact {
+  position: relative;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.section-view--contact .site-nav {
+  position: relative;
+  z-index: 2;
+}
+
+.section-view--contact .contact {
+  position: absolute;
+  inset: 0;
+  padding: 0 1.5rem;
+}
+
+.contact__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1.15rem;
+}
+
+.contact__row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  color: inherit;
+  text-decoration: none;
+  font-family: var(--font-display);
+  font-size: 1.18rem;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+a.contact__row:hover {
+  color: var(--ink);
+  opacity: 0.62;
+}
+
+a.contact__row:focus-visible {
+  outline: 1px solid var(--ink);
+  outline-offset: 4px;
+}
+
+.contact__icon {
+  width: 1.12rem;
+  height: 1.12rem;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.35;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.contact .section-view__note {
+  margin: 0;
+}
+
 .expos-index {
   width: 100%;
   margin: 0;
