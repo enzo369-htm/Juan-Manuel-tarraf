@@ -41,6 +41,16 @@ async function ensureContactColumns(db: ReturnType<typeof sql>) {
   await db`alter table section_copy add column if not exists email text not null default ''`
 }
 
+async function ensurePortraitScale(db: ReturnType<typeof sql>) {
+  await db`alter table section_copy add column if not exists portrait_scale int not null default 100`
+}
+
+function clampPortraitScale(value: unknown) {
+  const n = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(n)) return 100
+  return Math.min(140, Math.max(60, Math.round(n)))
+}
+
 type PlaceRow = {
   id: string
   canvas_id: string | null
@@ -268,6 +278,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         instagram_handle?: string | null
         instagram_url?: string | null
         email?: string | null
+        portrait_scale?: number | null
       },
     ) => ({
       slug: row?.slug ?? slug,
@@ -276,6 +287,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
       instagramHandle: row?.instagram_handle ?? '',
       instagramUrl: row?.instagram_url ?? '',
       email: row?.email ?? '',
+      portraitScale: clampPortraitScale(row?.portrait_scale),
     })
     if (copyMatch && method === 'GET') {
       if (!hasDatabase()) {
@@ -284,7 +296,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
       }
       try {
         const rows = (await sql()`
-          select section_slug as slug, body, portrait_url, instagram_handle, instagram_url, email
+          select section_slug as slug, body, portrait_url, instagram_handle, instagram_url, email, portrait_scale
           from section_copy
           where section_slug = ${copyMatch[1]}
         `) as {
@@ -294,13 +306,15 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
           instagram_handle: string | null
           instagram_url: string | null
           email: string | null
+          portrait_scale: number | null
         }[]
         sendJson(res, 200, toCopy(copyMatch[1], rows[0]))
       } catch {
         try {
           await ensureContactColumns(sql())
+          await ensurePortraitScale(sql())
           const rows = (await sql()`
-            select section_slug as slug, body, portrait_url, instagram_handle, instagram_url, email
+            select section_slug as slug, body, portrait_url, instagram_handle, instagram_url, email, portrait_scale
             from section_copy
             where section_slug = ${copyMatch[1]}
           `) as {
@@ -310,6 +324,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
             instagram_handle: string | null
             instagram_url: string | null
             email: string | null
+            portrait_scale: number | null
           }[]
           sendJson(res, 200, toCopy(copyMatch[1], rows[0]))
         } catch {
@@ -340,6 +355,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
       const body = await readJson<{
         body?: string
         portraitUrl?: string
+        portraitScale?: number
         instagramHandle?: string
         instagramUrl?: string
         email?: string
@@ -384,13 +400,29 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
       const portraitUrl =
         slug === 'bio' && typeof body.portraitUrl === 'string' ? body.portraitUrl : null
       if (portraitUrl !== null) {
-        await db`
-          insert into section_copy (section_slug, body, portrait_url)
-          values (${slug}, ${text}, ${portraitUrl})
-          on conflict (section_slug) do update
-          set body = excluded.body, portrait_url = excluded.portrait_url
-        `
-        sendJson(res, 200, toCopy(slug, { slug, body: text, portrait_url: portraitUrl }))
+        const portraitScale = clampPortraitScale(body.portraitScale)
+        const saveBio = async () => {
+          await db`
+            insert into section_copy (section_slug, body, portrait_url, portrait_scale)
+            values (${slug}, ${text}, ${portraitUrl}, ${portraitScale})
+            on conflict (section_slug) do update
+            set body = excluded.body,
+                portrait_url = excluded.portrait_url,
+                portrait_scale = excluded.portrait_scale
+          `
+        }
+        try {
+          await saveBio()
+        } catch {
+          await ensurePortraitScale(db)
+          await saveBio()
+        }
+        sendJson(res, 200, toCopy(slug, {
+          slug,
+          body: text,
+          portrait_url: portraitUrl,
+          portrait_scale: portraitScale,
+        }))
         return
       }
       await db`

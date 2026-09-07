@@ -79,7 +79,8 @@ create table if not exists section_copy (
   portrait_url text,
   instagram_handle text not null default '',
   instagram_url text not null default '',
-  email text not null default ''
+  email text not null default '',
+  portrait_scale int not null default 100
 );
 
 create table if not exists texts (

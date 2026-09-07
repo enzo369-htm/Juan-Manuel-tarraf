@@ -8,6 +8,7 @@ type CopyRow = {
   instagram_handle?: string | null
   instagram_url?: string | null
   email?: string | null
+  portrait_scale?: number | null
 }
 
 function cookies(header: string) {
@@ -55,11 +56,18 @@ function toCopy(slug: string, row?: CopyRow) {
     instagramHandle: row?.instagram_handle ?? '',
     instagramUrl: row?.instagram_url ?? '',
     email: row?.email ?? '',
+    portraitScale: clampPortraitScale(row?.portrait_scale),
   }
 }
 
 function asText(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function clampPortraitScale(value: unknown) {
+  const n = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(n)) return 100
+  return Math.min(140, Math.max(60, Math.round(n)))
 }
 
 export default {
@@ -85,10 +93,14 @@ export default {
         await sql`alter table section_copy add column if not exists email text not null default ''`
       }
 
+      const ensurePortraitScale = async () => {
+        await sql`alter table section_copy add column if not exists portrait_scale int not null default 100`
+      }
+
       if (request.method === 'GET') {
         try {
           const rows = (await sql`
-            select section_slug as slug, body, portrait_url, instagram_handle, instagram_url, email
+            select section_slug as slug, body, portrait_url, instagram_handle, instagram_url, email, portrait_scale
             from section_copy
             where section_slug = ${slug}
           `) as CopyRow[]
@@ -96,8 +108,9 @@ export default {
         } catch {
           try {
             await ensureContactColumns()
+            await ensurePortraitScale()
             const rows = (await sql`
-              select section_slug as slug, body, portrait_url, instagram_handle, instagram_url, email
+              select section_slug as slug, body, portrait_url, instagram_handle, instagram_url, email, portrait_scale
               from section_copy
               where section_slug = ${slug}
             `) as CopyRow[]
@@ -127,6 +140,7 @@ export default {
         const payload = (await request.json().catch(() => ({}))) as {
           body?: string
           portraitUrl?: string
+          portraitScale?: number
           instagramHandle?: string
           instagramUrl?: string
           email?: string
@@ -173,20 +187,38 @@ export default {
           slug === 'bio' && typeof payload.portraitUrl === 'string' ? payload.portraitUrl : null
 
         if (portraitUrl !== null) {
-          try {
+          const portraitScale = clampPortraitScale(payload.portraitScale)
+          const saveBio = async () => {
             await sql`
-              insert into section_copy (section_slug, body, portrait_url)
-              values (${slug}, ${text}, ${portraitUrl})
+              insert into section_copy (section_slug, body, portrait_url, portrait_scale)
+              values (${slug}, ${text}, ${portraitUrl}, ${portraitScale})
               on conflict (section_slug) do update
-              set body = excluded.body, portrait_url = excluded.portrait_url
+              set body = excluded.body,
+                  portrait_url = excluded.portrait_url,
+                  portrait_scale = excluded.portrait_scale
             `
-            return Response.json(toCopy(slug, { slug, body: text, portrait_url: portraitUrl }))
-          } catch {
-            return Response.json(
-              { error: 'Falta correr db/008_bio_portrait.sql en Neon' },
-              { status: 503 },
-            )
           }
+          try {
+            await saveBio()
+          } catch {
+            try {
+              await ensurePortraitScale()
+              await saveBio()
+            } catch {
+              return Response.json(
+                { error: 'Falta correr db/008_bio_portrait.sql en Neon' },
+                { status: 503 },
+              )
+            }
+          }
+          return Response.json(
+            toCopy(slug, {
+              slug,
+              body: text,
+              portrait_url: portraitUrl,
+              portrait_scale: portraitScale,
+            }),
+          )
         }
 
         await sql`

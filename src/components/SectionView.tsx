@@ -14,6 +14,7 @@ type Props = {
 export function SectionView({ section }: Props) {
   const [body, setBody] = useState('')
   const [portraitUrl, setPortraitUrl] = useState('')
+  const [portraitScale, setPortraitScale] = useState(100)
   const [instagramHandle, setInstagramHandle] = useState('')
   const [instagramUrl, setInstagramUrl] = useState('')
   const [email, setEmail] = useState('')
@@ -26,6 +27,7 @@ export function SectionView({ section }: Props) {
     setReady(false)
     setBody('')
     setPortraitUrl('')
+    setPortraitScale(100)
     setInstagramHandle('')
     setInstagramUrl('')
     setEmail('')
@@ -40,6 +42,7 @@ export function SectionView({ section }: Props) {
         if (cancelled) return
         setBody(data.body)
         setPortraitUrl(data.portraitUrl ?? '')
+        setPortraitScale(data.portraitScale ?? 100)
         setInstagramHandle(data.instagramHandle ?? '')
         setInstagramUrl(data.instagramUrl ?? '')
         setEmail(data.email ?? '')
@@ -48,6 +51,7 @@ export function SectionView({ section }: Props) {
         if (cancelled) return
         setBody('')
         setPortraitUrl('')
+        setPortraitScale(100)
         setInstagramHandle('')
         setInstagramUrl('')
         setEmail('')
@@ -83,7 +87,10 @@ export function SectionView({ section }: Props) {
       <SiteNav />
 
       {!ready ? null : isBio ? (
-        <div className="bio">
+        <div
+          className="bio"
+          style={{ ['--bio-portrait-scale' as string]: String(portraitScale) }}
+        >
           <div className="bio__text">{body}</div>
           <div className="bio__portrait">
             {portraitUrl ? <img src={portraitUrl} alt="" /> : <span aria-hidden />}

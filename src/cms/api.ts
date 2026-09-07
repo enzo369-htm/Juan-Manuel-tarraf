@@ -63,6 +63,7 @@ export type SectionCopy = {
   instagramHandle?: string
   instagramUrl?: string
   email?: string
+  portraitScale?: number
 }
 
 export async function apiGetCopy(slug: string) {
@@ -77,6 +78,7 @@ export async function apiSaveCopy(
     instagramHandle?: string
     instagramUrl?: string
     email?: string
+    portraitScale?: number
   },
 ) {
   return request<SectionCopy>(`/api/copy/${slug}`, {

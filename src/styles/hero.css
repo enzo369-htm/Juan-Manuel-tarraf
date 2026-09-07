@@ -339,8 +339,12 @@ html.page-scroll #root {
 }
 
 .bio {
+  --bio-portrait-scale: 100;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(
+      7rem,
+      calc((100% - 3.2rem) * var(--bio-portrait-scale) / 200)
+    );
   align-items: start;
   gap: 4rem 3.2rem;
   width: min(72rem, calc(100% - 3rem));
@@ -378,6 +382,11 @@ html.page-scroll #root {
     grid-template-columns: 1fr;
     gap: 2.2rem;
     padding-top: 2rem;
+  }
+
+  .bio__portrait {
+    width: min(100%, calc(var(--bio-portrait-scale) * 1%));
+    justify-self: start;
   }
 }
 

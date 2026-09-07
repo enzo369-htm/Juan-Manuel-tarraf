@@ -11,6 +11,7 @@ export function AdminCopy({ slug }: Props) {
   const isBio = slug === 'bio'
   const [body, setBody] = useState('')
   const [portraitUrl, setPortraitUrl] = useState('')
+  const [portraitScale, setPortraitScale] = useState(100)
   const [status, setStatus] = useState('Listo')
   const [uploading, setUploading] = useState(false)
 
@@ -19,10 +20,12 @@ export function AdminCopy({ slug }: Props) {
       .then((data) => {
         setBody(data.body)
         setPortraitUrl(data.portraitUrl ?? '')
+        setPortraitScale(data.portraitScale ?? 100)
       })
       .catch(() => {
         setBody('')
         setPortraitUrl('')
+        setPortraitScale(100)
       })
   }, [slug])
 
@@ -31,7 +34,7 @@ export function AdminCopy({ slug }: Props) {
     try {
       await apiSaveCopy(slug, {
         body,
-        ...(isBio ? { portraitUrl } : {}),
+        ...(isBio ? { portraitUrl, portraitScale } : {}),
       })
       setStatus('Guardado')
     } catch (error) {
@@ -77,13 +80,27 @@ export function AdminCopy({ slug }: Props) {
         />
         {isBio && (
           <div className="admin-bio__photo">
-            <div className="admin-bio__frame">
+            <div
+              className="admin-bio__frame"
+              style={{ width: `${portraitScale}%` }}
+            >
               {portraitUrl ? (
                 <img src={portraitUrl} alt="" />
               ) : (
                 <span className="admin-bio__empty">Sin foto</span>
               )}
             </div>
+            <label className="admin-bio__scale">
+              Tamaño
+              <input
+                type="range"
+                min={60}
+                max={140}
+                value={portraitScale}
+                onChange={(e) => setPortraitScale(Number(e.target.value))}
+              />
+              <span>{portraitScale}%</span>
+            </label>
             <div className="admin-bar__actions">
               <label className="admin-bar__btn">
                 {uploading ? 'Subiendo…' : portraitUrl ? 'Cambiar foto' : 'Subir foto'}
