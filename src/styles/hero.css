@@ -493,7 +493,6 @@ a.contact__row:focus-visible {
 
 .expos-index__item {
   padding: 2.6rem 0;
-  border-bottom: 1px solid var(--line);
 }
 
 .expos-index__card {
@@ -619,7 +618,6 @@ a.contact__row:focus-visible {
 
 .texts-index__item {
   padding: 2.6rem 0;
-  border-bottom: 1px solid var(--line);
 }
 
 .texts-index__card {

@@ -13,7 +13,7 @@ export function SiteNav() {
   return (
     <header className="site-nav">
       <Link className="site-nav__brand" to="/">
-        Juan Tarraf
+        Juan M. Tarraf
       </Link>
       <nav aria-label="Secciones">
         <ul className="site-nav__list">
