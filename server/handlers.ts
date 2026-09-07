@@ -642,7 +642,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         if (!/^[0-9a-f-]{36}$/i.test(canvas.id)) continue
         const title = typeof canvas.title === 'string' ? canvas.title.slice(0, 200) : ''
         const description =
-          typeof canvas.description === 'string' ? canvas.description.slice(0, 1200) : ''
+          typeof canvas.description === 'string' ? canvas.description.slice(0, 6000) : ''
         const ratio =
           typeof canvas.heightRatio === 'number' && Number.isFinite(canvas.heightRatio)
             ? Math.min(2.5, Math.max(0.6, canvas.heightRatio))

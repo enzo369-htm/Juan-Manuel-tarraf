@@ -357,7 +357,7 @@ export default {
           const title = clip(typeof canvas.title === 'string' ? canvas.title : '', 200)
           const description = clip(
             typeof canvas.description === 'string' ? canvas.description : '',
-            1200,
+            6000,
           )
           const ratio =
             typeof canvas.heightRatio === 'number' && Number.isFinite(canvas.heightRatio)

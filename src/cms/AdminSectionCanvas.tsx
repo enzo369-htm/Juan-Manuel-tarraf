@@ -407,7 +407,7 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
               <textarea
                 className="admin-series-text__body"
                 value={canvas.description ?? ''}
-                maxLength={1200}
+                maxLength={6000}
                 placeholder="Descripción corta"
                 rows={4}
                 onChange={(e) =>
