@@ -474,7 +474,6 @@ a.contact__row:focus-visible {
 
 .expos-index__head {
   padding: 0.4rem 0 2.4rem;
-  border-bottom: 1px solid var(--line);
 }
 
 .expos-index__kicker {
@@ -599,7 +598,6 @@ a.contact__row:focus-visible {
 
 .texts-index__head {
   padding: 0.4rem 0 2.4rem;
-  border-bottom: 1px solid var(--line);
 }
 
 .texts-index__kicker {
