@@ -48,6 +48,7 @@ export async function apiSaveHero(layout: HeroLayout): Promise<HeroLayout> {
     body: JSON.stringify({
       positions: layout.positions,
       backgroundMediaId: layout.backgroundMediaId,
+      labelInk: layout.labelInk,
     }),
   })
 }

@@ -3,6 +3,18 @@ import type { HeroLayout, PiecePosition } from './types'
 
 export const MIN_PIECE_WIDTH = 120
 export const MAX_PIECE_WIDTH = 820
+/** 0 = blanco, 255 = negro. 233 ≈ el negro actual del sitio. */
+export const DEFAULT_LABEL_INK = 233
+
+export function clampLabelInk(value: number) {
+  if (!Number.isFinite(value)) return DEFAULT_LABEL_INK
+  return Math.round(Math.min(255, Math.max(0, value)))
+}
+
+export function labelInkColor(ink: number) {
+  const gray = 255 - clampLabelInk(ink)
+  return `rgb(${gray}, ${gray}, ${gray})`
+}
 
 export function defaultPositions(): Record<SectionId, PiecePosition> {
   return Object.fromEntries(
@@ -16,6 +28,7 @@ export function defaultLayout(): HeroLayout {
     updatedAt: new Date(0).toISOString(),
     positions: defaultPositions(),
     backgroundUrl: HERO_BG_FALLBACK,
+    labelInk: DEFAULT_LABEL_INK,
   }
 }
 

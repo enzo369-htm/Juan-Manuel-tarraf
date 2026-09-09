@@ -43,11 +43,27 @@ type HeroRow = {
 }
 
 const BG_FALLBACK = '/works/img fondo hero.jpg'
+const DEFAULT_LABEL_INK = 233
+
+function clampLabelInk(value: unknown) {
+  const n = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(n)) return DEFAULT_LABEL_INK
+  return Math.round(Math.min(255, Math.max(0, n)))
+}
+
+function isMissingLabelInk(error: unknown) {
+  if (!error || typeof error !== 'object') return false
+  const code = 'code' in error ? String((error as { code?: string }).code) : ''
+  if (code === '42703') return true
+  const message = error instanceof Error ? error.message : String(error)
+  return /label_ink/i.test(message) && /does not exist|undefined_column/i.test(message)
+}
 
 function toHeroLayout(
   rows: HeroRow[],
   backgroundUrl = BG_FALLBACK,
   backgroundMediaId?: string,
+  labelInk = DEFAULT_LABEL_INK,
 ) {
   const positions: Record<
     string,
@@ -64,7 +80,7 @@ function toHeroLayout(
     }
     if (row.updated_at > updatedAt) updatedAt = row.updated_at
   }
-  return { version: 1 as const, updatedAt, positions, backgroundUrl, backgroundMediaId }
+  return { version: 1 as const, updatedAt, positions, backgroundUrl, backgroundMediaId, labelInk }
 }
 
 export default {
@@ -96,19 +112,34 @@ export default {
       `) as HeroRow[]
       let backgroundUrl = BG_FALLBACK
       let backgroundMediaId: string | undefined
+      let labelInk = DEFAULT_LABEL_INK
       try {
         const bg = (await sql`
-          select b.media_id, m.url
+          select b.media_id, b.label_ink, m.url
           from hero_background b
           left join media m on m.id = b.media_id
           where b.id = 1
-        `) as { media_id: string | null; url: string | null }[]
+        `) as { media_id: string | null; label_ink: number | null; url: string | null }[]
         if (bg[0]?.url) backgroundUrl = bg[0].url
         if (bg[0]?.media_id) backgroundMediaId = bg[0].media_id
-      } catch {
-        /* db/010_hero_background.sql still missing */
+        if (bg[0]?.label_ink != null) labelInk = clampLabelInk(bg[0].label_ink)
+      } catch (error) {
+        if (isMissingLabelInk(error)) {
+          try {
+            const bg = (await sql`
+              select b.media_id, m.url
+              from hero_background b
+              left join media m on m.id = b.media_id
+              where b.id = 1
+            `) as { media_id: string | null; url: string | null }[]
+            if (bg[0]?.url) backgroundUrl = bg[0].url
+            if (bg[0]?.media_id) backgroundMediaId = bg[0].media_id
+          } catch {
+            /* db/010_hero_background.sql still missing */
+          }
+        }
       }
-      return Response.json(toHeroLayout(rows, backgroundUrl, backgroundMediaId))
+      return Response.json(toHeroLayout(rows, backgroundUrl, backgroundMediaId, labelInk))
     } catch (error) {
       console.error(error)
       return Response.json({ error: 'Error de servidor' }, { status: 500 })

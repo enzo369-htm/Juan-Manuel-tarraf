@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useHeroLayout } from '../cms/useHeroLayout'
+import { DEFAULT_LABEL_INK, labelInkColor } from '../cms/defaults'
 import { HERO_BG_FALLBACK } from '../data/sections'
 import { WORLD, type SectionId } from '../data/works'
 import { useCameraController } from '../hooks/useCameraController'
@@ -51,7 +52,14 @@ export function HeroCanvas() {
   }, [])
 
   return (
-    <section ref={viewportRef} className="hero" aria-label="Espacio de entrada">
+    <section
+      ref={viewportRef}
+      className="hero"
+      aria-label="Espacio de entrada"
+      style={{
+        ['--hero-label' as string]: labelInkColor(layout.labelInk ?? DEFAULT_LABEL_INK),
+      }}
+    >
       <div className="hero__atmosphere" aria-hidden />
 
       <div

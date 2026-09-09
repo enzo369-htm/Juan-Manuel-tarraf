@@ -1,5 +1,5 @@
 import { sections, type SectionId } from '../data/sections'
-import { clampPiece, defaultLayout } from './defaults'
+import { clampPiece, defaultLayout, DEFAULT_LABEL_INK, clampLabelInk } from './defaults'
 import type { HeroLayout, LayoutRepository } from './types'
 
 export const LAYOUT_STORAGE_KEY = 'jt.hero-layout.v2'
@@ -45,6 +45,8 @@ function parseLayout(raw: string | null): HeroLayout | null {
           : fallback.backgroundUrl,
       backgroundMediaId:
         typeof data.backgroundMediaId === 'string' ? data.backgroundMediaId : fallback.backgroundMediaId,
+      labelInk:
+        typeof data.labelInk === 'number' ? clampLabelInk(data.labelInk) : fallback.labelInk ?? DEFAULT_LABEL_INK,
     }
   } catch {
     return null
@@ -83,6 +85,7 @@ export const layoutRepository: LayoutRepository = {
       positions: layout.positions,
       backgroundUrl: layout.backgroundUrl,
       backgroundMediaId: layout.backgroundMediaId,
+      labelInk: layout.labelInk ?? DEFAULT_LABEL_INK,
     }
     writeCachedLayout(next)
     return next

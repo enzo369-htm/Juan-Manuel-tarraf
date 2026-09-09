@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPoi
 import { WorkPiece } from '../components/WorkPiece'
 import { HERO_BG_FALLBACK, WORLD, type SectionId } from '../data/sections'
 import type { Work } from '../data/works'
-import { clampPiece } from './defaults'
+import { clampPiece, DEFAULT_LABEL_INK, labelInkColor } from './defaults'
 import { apiUploadHeroMedia } from './api'
 import { useAdminViewport } from './useAdminViewport'
 import { useHeroLayout, layoutToWorks } from './useHeroLayout'
@@ -48,6 +48,7 @@ function paintPiece(id: SectionId, piece: Work) {
 export function AdminEditor() {
   const { layout, works, ready, save, restoreDefaults } = useHeroLayout()
   const [draft, setDraft] = useState<Work[]>(works)
+  const [labelInk, setLabelInk] = useState(layout.labelInk ?? DEFAULT_LABEL_INK)
   const [selectedId, setSelectedId] = useState<SectionId | null>(null)
   const [status, setStatus] = useState('Listo')
   const [saving, setSaving] = useState(false)
@@ -57,9 +58,11 @@ export function AdminEditor() {
   const fileRef = useRef<HTMLInputElement>(null)
   const fileTargetRef = useRef<UploadTarget | null>(null)
   const draftRef = useRef(draft)
+  const labelInkRef = useRef(labelInk)
   const dragRef = useRef<DragState | null>(null)
   const busyRef = useRef(false)
   draftRef.current = draft
+  labelInkRef.current = labelInk
 
   const { scale, screenToWorld, fit, zoomBy } = useAdminViewport(viewportRef, worldRef)
   const backgroundUrl = layout.backgroundUrl || HERO_BG_FALLBACK
@@ -68,7 +71,8 @@ export function AdminEditor() {
     if (!ready) return
     if (dragRef.current) return
     setDraft(works)
-  }, [ready, layout.updatedAt, works])
+    if (typeof layout.labelInk === 'number') setLabelInk(layout.labelInk)
+  }, [ready, layout.updatedAt, layout.labelInk, works])
 
   const persist = useCallback(
     async (
@@ -87,6 +91,7 @@ export function AdminEditor() {
           positions,
           backgroundMediaId: extra?.backgroundMediaId ?? layout.backgroundMediaId,
           backgroundUrl: extra?.backgroundUrl ?? layout.backgroundUrl,
+          labelInk: extra?.labelInk ?? labelInkRef.current,
         })
         setStatus('Guardado')
       } catch (error) {
@@ -301,6 +306,30 @@ export function AdminEditor() {
             >
               {uploading === 'background' ? 'Subiendo…' : 'Cambiar fondo'}
             </button>
+            <label className="admin-hero-ink">
+              <p className="admin-hero-media__title">Color de los nombres</p>
+              <span className="admin-hero-ink__row">
+                <span>Blanco</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={255}
+                  value={labelInk}
+                  disabled={busy}
+                  aria-label="Color de los nombres, de blanco a negro"
+                  onChange={(e) => setLabelInk(Number(e.target.value))}
+                  onPointerUp={() => {
+                    if (busyRef.current) return
+                    void persist(draftRef.current).catch(() => {})
+                  }}
+                  onKeyUp={() => {
+                    if (busyRef.current) return
+                    void persist(draftRef.current).catch(() => {})
+                  }}
+                />
+                <span>Negro</span>
+              </span>
+            </label>
           </div>
 
           <div>
@@ -335,7 +364,12 @@ export function AdminEditor() {
           </div>
         </aside>
 
-        <section ref={viewportRef} className="hero hero--admin" aria-label="Editor de grilla">
+        <section
+          ref={viewportRef}
+          className="hero hero--admin"
+          aria-label="Editor de grilla"
+          style={{ ['--hero-label' as string]: labelInkColor(labelInk) }}
+        >
           <div className="hero__atmosphere" aria-hidden />
           <div
             ref={worldRef}

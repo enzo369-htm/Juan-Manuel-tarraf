@@ -111,10 +111,27 @@ function isMissingHeroBackgroundTable(error: unknown) {
   return /hero_background/i.test(message) && /does not exist|undefined_table/i.test(message)
 }
 
+function isMissingLabelInk(error: unknown) {
+  if (!error || typeof error !== 'object') return false
+  const code = 'code' in error ? String((error as { code?: string }).code) : ''
+  if (code === '42703') return true
+  const message = error instanceof Error ? error.message : String(error)
+  return /label_ink/i.test(message) && /does not exist|undefined_column/i.test(message)
+}
+
+const DEFAULT_LABEL_INK = 233
+
+function clampLabelInk(value: unknown) {
+  const n = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(n)) return DEFAULT_LABEL_INK
+  return Math.round(Math.min(255, Math.max(0, n)))
+}
+
 function toHeroLayout(
   rows: HeroRow[],
   backgroundUrl = BG_FALLBACK,
   backgroundMediaId?: string,
+  labelInk = DEFAULT_LABEL_INK,
 ) {
   const positions: Record<
     string,
@@ -131,7 +148,7 @@ function toHeroLayout(
     }
     if (row.updated_at > updatedAt) updatedAt = row.updated_at
   }
-  return { version: 1 as const, updatedAt, positions, backgroundUrl, backgroundMediaId }
+  return { version: 1 as const, updatedAt, positions, backgroundUrl, backgroundMediaId, labelInk }
 }
 
 async function loadHero(db: ReturnType<typeof sql>) {
@@ -143,19 +160,34 @@ async function loadHero(db: ReturnType<typeof sql>) {
   `) as HeroRow[]
   let backgroundUrl = BG_FALLBACK
   let backgroundMediaId: string | undefined
+  let labelInk = DEFAULT_LABEL_INK
   try {
     const bg = (await db`
-      select b.media_id, m.url
+      select b.media_id, b.label_ink, m.url
       from hero_background b
       left join media m on m.id = b.media_id
       where b.id = 1
-    `) as { media_id: string | null; url: string | null }[]
+    `) as { media_id: string | null; label_ink: number | null; url: string | null }[]
     if (bg[0]?.url) backgroundUrl = bg[0].url
     if (bg[0]?.media_id) backgroundMediaId = bg[0].media_id
-  } catch {
-    /* db/010_hero_background.sql still missing */
+    if (bg[0]?.label_ink != null) labelInk = clampLabelInk(bg[0].label_ink)
+  } catch (error) {
+    if (isMissingLabelInk(error)) {
+      try {
+        const bg = (await db`
+          select b.media_id, m.url
+          from hero_background b
+          left join media m on m.id = b.media_id
+          where b.id = 1
+        `) as { media_id: string | null; url: string | null }[]
+        if (bg[0]?.url) backgroundUrl = bg[0].url
+        if (bg[0]?.media_id) backgroundMediaId = bg[0].media_id
+      } catch {
+        /* db/010_hero_background.sql still missing */
+      }
+    }
   }
-  return toHeroLayout(rows, backgroundUrl, backgroundMediaId)
+  return toHeroLayout(rows, backgroundUrl, backgroundMediaId, labelInk)
 }
 
 export async function handleApi(req: ApiRequest, res: ApiResponse) {
@@ -204,6 +236,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
       const body = await readJson<{
         positions?: Record<string, { x: number; y: number; width: number; mediaId?: string }>
         backgroundMediaId?: string
+        labelInk?: number
       }>(req)
       const db = sql()
       for (const [slug, pos] of Object.entries(body.positions ?? {})) {
@@ -242,6 +275,27 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         } catch (error) {
           if (isMissingHeroBackgroundTable(error)) {
             sendJson(res, 503, { error: 'Falta correr db/010_hero_background.sql en Neon' })
+            return
+          }
+          throw error
+        }
+      }
+      if (typeof body.labelInk === 'number' && Number.isFinite(body.labelInk)) {
+        const ink = clampLabelInk(body.labelInk)
+        try {
+          await db`
+            insert into hero_background (id, label_ink, updated_at)
+            values (1, ${ink}, now())
+            on conflict (id) do update
+            set label_ink = excluded.label_ink, updated_at = now()
+          `
+        } catch (error) {
+          if (isMissingHeroBackgroundTable(error)) {
+            sendJson(res, 503, { error: 'Falta correr db/010_hero_background.sql en Neon' })
+            return
+          }
+          if (isMissingLabelInk(error)) {
+            sendJson(res, 503, { error: 'Falta correr db/015_hero_label_ink.sql en Neon' })
             return
           }
           throw error

@@ -21,6 +21,7 @@ create table if not exists media (
 create table if not exists hero_background (
   id int primary key default 1 check (id = 1),
   media_id uuid references media (id) on delete set null,
+  label_ink smallint not null default 233 check (label_ink >= 0 and label_ink <= 255),
   updated_at timestamptz not null default now()
 );
 

@@ -14,6 +14,8 @@ export type HeroLayout = {
   positions: Record<SectionId, PiecePosition>
   backgroundUrl?: string
   backgroundMediaId?: string
+  /** 0 = blanco, 255 = negro. Un color para los seis nombres del giro. */
+  labelInk?: number
 }
 
 export type LayoutRepository = {
