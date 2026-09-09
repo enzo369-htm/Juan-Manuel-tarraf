@@ -89,6 +89,7 @@ create table if not exists texts (
   title text not null,
   description text not null default '',
   body text not null default '',
+  cover_media_id uuid references media (id) on delete set null,
   created_at timestamptz not null default now()
 );
 

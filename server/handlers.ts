@@ -119,6 +119,36 @@ function isMissingLabelInk(error: unknown) {
   return /label_ink/i.test(message) && /does not exist|undefined_column/i.test(message)
 }
 
+function isMissingTextCover(error: unknown) {
+  if (!error || typeof error !== 'object') return false
+  const code = 'code' in error ? String((error as { code?: string }).code) : ''
+  if (code === '42703') return true
+  const message = error instanceof Error ? error.message : String(error)
+  return /cover_media_id/i.test(message) && /does not exist|undefined_column/i.test(message)
+}
+
+type TextRow = {
+  id: string
+  title: string
+  description: string
+  body?: string
+  created_at: string
+  cover_media_id?: string | null
+  cover_url?: string | null
+}
+
+function toText(row: TextRow) {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    body: row.body,
+    created_at: row.created_at,
+    coverMediaId: row.cover_media_id || undefined,
+    coverUrl: row.cover_url || undefined,
+  }
+}
+
 const DEFAULT_LABEL_INK = 233
 
 function clampLabelInk(value: unknown) {
@@ -961,10 +991,22 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         sendJson(res, 200, { texts: [] })
         return
       }
-      const rows = await sql()`
-        select id, title, description, created_at from texts order by created_at desc
-      `
-      sendJson(res, 200, { texts: rows })
+      try {
+        const rows = (await sql()`
+          select t.id, t.title, t.description, t.created_at,
+                 t.cover_media_id, m.url as cover_url
+          from texts t
+          left join media m on m.id = t.cover_media_id
+          order by t.created_at desc
+        `) as TextRow[]
+        sendJson(res, 200, { texts: rows.map(toText) })
+      } catch (error) {
+        if (!isMissingTextCover(error)) throw error
+        const rows = (await sql()`
+          select id, title, description, created_at from texts order by created_at desc
+        `) as TextRow[]
+        sendJson(res, 200, { texts: rows.map(toText) })
+      }
       return
     }
 
@@ -974,18 +1016,42 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         sendJson(res, 503, { error: 'DATABASE_URL no configurada' })
         return
       }
-      const payload = await readJson<{ title?: string; description?: string; body?: string }>(req)
+      const payload = await readJson<{
+        title?: string
+        description?: string
+        body?: string
+        coverMediaId?: string
+      }>(req)
       const title = (payload.title ?? '').trim()
       if (!title) {
         sendJson(res, 400, { error: 'El título es obligatorio' })
         return
       }
-      const created = await sql()`
-        insert into texts (title, description, body)
-        values (${title}, ${payload.description ?? ''}, ${payload.body ?? ''})
-        returning id, title, description, body, created_at
-      `
-      sendJson(res, 200, { text: created[0] })
+      const cover =
+        typeof payload.coverMediaId === 'string' && isUuid(payload.coverMediaId)
+          ? payload.coverMediaId
+          : null
+      try {
+        const created = (await sql()`
+          insert into texts (title, description, body, cover_media_id)
+          values (${title}, ${payload.description ?? ''}, ${payload.body ?? ''}, ${cover})
+          returning id, title, description, body, created_at, cover_media_id
+        `) as TextRow[]
+        let coverUrl: string | undefined
+        if (created[0]?.cover_media_id) {
+          const media = (await sql()`
+            select url from media where id = ${created[0].cover_media_id}
+          `) as { url: string }[]
+          coverUrl = media[0]?.url
+        }
+        sendJson(res, 200, { text: toText({ ...created[0], cover_url: coverUrl ?? null }) })
+      } catch (error) {
+        if (isMissingTextCover(error)) {
+          sendJson(res, 503, { error: 'Falta correr db/016_text_cover.sql en Neon' })
+          return
+        }
+        throw error
+      }
       return
     }
 
@@ -995,14 +1061,30 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         sendJson(res, 503, { error: 'DATABASE_URL no configurada' })
         return
       }
-      const rows = await sql()`
-        select id, title, description, body, created_at from texts where id = ${textMatch[1]}
-      `
-      if (!rows[0]) {
-        sendJson(res, 404, { error: 'No encontrado' })
-        return
+      try {
+        const rows = (await sql()`
+          select t.id, t.title, t.description, t.body, t.created_at,
+                 t.cover_media_id, m.url as cover_url
+          from texts t
+          left join media m on m.id = t.cover_media_id
+          where t.id = ${textMatch[1]}
+        `) as TextRow[]
+        if (!rows[0]) {
+          sendJson(res, 404, { error: 'No encontrado' })
+          return
+        }
+        sendJson(res, 200, { text: toText(rows[0]) })
+      } catch (error) {
+        if (!isMissingTextCover(error)) throw error
+        const rows = (await sql()`
+          select id, title, description, body, created_at from texts where id = ${textMatch[1]}
+        `) as TextRow[]
+        if (!rows[0]) {
+          sendJson(res, 404, { error: 'No encontrado' })
+          return
+        }
+        sendJson(res, 200, { text: toText(rows[0]) })
       }
-      sendJson(res, 200, { text: rows[0] })
       return
     }
 
@@ -1017,25 +1099,59 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         sendJson(res, 200, { ok: true })
         return
       }
-      const payload = await readJson<{ title?: string; description?: string; body?: string }>(req)
+      const payload = await readJson<{
+        title?: string
+        description?: string
+        body?: string
+        coverMediaId?: string
+      }>(req)
       const title = (payload.title ?? '').trim()
       if (!title) {
         sendJson(res, 400, { error: 'El título es obligatorio' })
         return
       }
-      const updated = await sql()`
-        update texts
-        set title = ${title},
-            description = ${payload.description ?? ''},
-            body = ${payload.body ?? ''}
-        where id = ${textMatch[1]}
-        returning id, title, description, body, created_at
-      `
-      if (!updated[0]) {
-        sendJson(res, 404, { error: 'No encontrado' })
-        return
+      const cover =
+        typeof payload.coverMediaId === 'string' && isUuid(payload.coverMediaId)
+          ? payload.coverMediaId
+          : undefined
+      try {
+        const updated = cover
+          ? ((await sql()`
+              update texts
+              set title = ${title},
+                  description = ${payload.description ?? ''},
+                  body = ${payload.body ?? ''},
+                  cover_media_id = ${cover}
+              where id = ${textMatch[1]}
+              returning id
+            `) as { id: string }[])
+          : ((await sql()`
+              update texts
+              set title = ${title},
+                  description = ${payload.description ?? ''},
+                  body = ${payload.body ?? ''}
+              where id = ${textMatch[1]}
+              returning id
+            `) as { id: string }[])
+        if (!updated[0]) {
+          sendJson(res, 404, { error: 'No encontrado' })
+          return
+        }
+        const rows = (await sql()`
+          select t.id, t.title, t.description, t.body, t.created_at,
+                 t.cover_media_id, m.url as cover_url
+          from texts t
+          left join media m on m.id = t.cover_media_id
+          where t.id = ${textMatch[1]}
+        `) as TextRow[]
+        sendJson(res, 200, { text: toText(rows[0]) })
+      } catch (error) {
+        if (isMissingTextCover(error)) {
+          sendJson(res, 503, { error: 'Falta correr db/016_text_cover.sql en Neon' })
+          return
+        }
+        throw error
       }
-      sendJson(res, 200, { text: updated[0] })
       return
     }
 

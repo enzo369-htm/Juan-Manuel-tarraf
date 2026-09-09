@@ -42,6 +42,36 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
 }
 
+function isMissingTextCover(error: unknown) {
+  if (!error || typeof error !== 'object') return false
+  const code = 'code' in error ? String((error as { code?: string }).code) : ''
+  if (code === '42703') return true
+  const message = error instanceof Error ? error.message : String(error)
+  return /cover_media_id/i.test(message) && /does not exist|undefined_column/i.test(message)
+}
+
+type TextRow = {
+  id: string
+  title: string
+  description: string
+  body?: string
+  created_at: string
+  cover_media_id?: string | null
+  cover_url?: string | null
+}
+
+function toText(row: TextRow) {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    body: row.body,
+    created_at: row.created_at,
+    coverMediaId: row.cover_media_id || undefined,
+    coverUrl: row.cover_url || undefined,
+  }
+}
+
 export default {
   async fetch(request: Request) {
     try {
@@ -58,15 +88,30 @@ export default {
       const sql = neon(dbUrl)
 
       if (request.method === 'GET') {
-        const rows = await sql`
-          select id, title, description, body, created_at
-          from texts
-          where id = ${id}
-        `
-        if (!rows[0]) {
-          return Response.json({ error: 'No encontrado' }, { status: 404 })
+        try {
+          const rows = (await sql`
+            select t.id, t.title, t.description, t.body, t.created_at,
+                   t.cover_media_id, m.url as cover_url
+            from texts t
+            left join media m on m.id = t.cover_media_id
+            where t.id = ${id}
+          `) as TextRow[]
+          if (!rows[0]) {
+            return Response.json({ error: 'No encontrado' }, { status: 404 })
+          }
+          return Response.json({ text: toText(rows[0]) })
+        } catch (error) {
+          if (!isMissingTextCover(error)) throw error
+          const rows = (await sql`
+            select id, title, description, body, created_at
+            from texts
+            where id = ${id}
+          `) as TextRow[]
+          if (!rows[0]) {
+            return Response.json({ error: 'No encontrado' }, { status: 404 })
+          }
+          return Response.json({ text: toText(rows[0]) })
         }
-        return Response.json({ text: rows[0] })
       }
 
       if (!(await isAuthed(request))) {
@@ -78,23 +123,55 @@ export default {
           title?: string
           description?: string
           body?: string
+          coverMediaId?: string
         }
         const title = (body.title ?? '').trim()
         if (!title) {
           return Response.json({ error: 'El título es obligatorio' }, { status: 400 })
         }
-        const updated = await sql`
-          update texts
-          set title = ${title},
-              description = ${body.description ?? ''},
-              body = ${body.body ?? ''}
-          where id = ${id}
-          returning id, title, description, body, created_at
-        `
-        if (!updated[0]) {
-          return Response.json({ error: 'No encontrado' }, { status: 404 })
+        const cover =
+          typeof body.coverMediaId === 'string' && isUuid(body.coverMediaId)
+            ? body.coverMediaId
+            : undefined
+        try {
+          const updated = cover
+            ? ((await sql`
+                update texts
+                set title = ${title},
+                    description = ${body.description ?? ''},
+                    body = ${body.body ?? ''},
+                    cover_media_id = ${cover}
+                where id = ${id}
+                returning id
+              `) as { id: string }[])
+            : ((await sql`
+                update texts
+                set title = ${title},
+                    description = ${body.description ?? ''},
+                    body = ${body.body ?? ''}
+                where id = ${id}
+                returning id
+              `) as { id: string }[])
+          if (!updated[0]) {
+            return Response.json({ error: 'No encontrado' }, { status: 404 })
+          }
+          const rows = (await sql`
+            select t.id, t.title, t.description, t.body, t.created_at,
+                   t.cover_media_id, m.url as cover_url
+            from texts t
+            left join media m on m.id = t.cover_media_id
+            where t.id = ${id}
+          `) as TextRow[]
+          return Response.json({ text: toText(rows[0]) })
+        } catch (error) {
+          if (isMissingTextCover(error)) {
+            return Response.json(
+              { error: 'Falta correr db/016_text_cover.sql en Neon' },
+              { status: 503 },
+            )
+          }
+          throw error
         }
-        return Response.json({ text: updated[0] })
       }
 
       if (request.method === 'DELETE') {

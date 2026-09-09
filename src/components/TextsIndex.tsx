@@ -47,6 +47,9 @@ export function TextsIndex() {
           {texts.map((entry) => (
             <li key={entry.id} className="texts-index__item">
               <Link className="texts-index__card" to={`/textos/${entry.id}`}>
+                <span className="texts-index__cover">
+                  {entry.coverUrl ? <img src={entry.coverUrl} alt="" /> : <span aria-hidden />}
+                </span>
                 <span className="texts-index__copy">
                   <h2>{entry.title}</h2>
                   <time dateTime={entry.created_at}>{formatDate(entry.created_at)}</time>

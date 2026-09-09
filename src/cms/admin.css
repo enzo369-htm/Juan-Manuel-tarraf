@@ -788,7 +788,10 @@
 }
 
 .admin-text-list__item {
-  display: block;
+  display: grid;
+  grid-template-columns: 4.6rem minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: center;
   width: 100%;
   padding: 0.85rem 0.95rem;
   border: 1px solid var(--line);
@@ -797,6 +800,20 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+.admin-text-list__thumb {
+  display: block;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: #e8e2d9;
+}
+
+.admin-text-list__thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .admin-text-list__item:hover {
@@ -810,7 +827,7 @@
   font-weight: 400;
 }
 
-.admin-text-list__item span {
+.admin-text-list__item > span:last-child > span {
   display: block;
   margin-top: 0.2rem;
   font-size: 0.78rem;

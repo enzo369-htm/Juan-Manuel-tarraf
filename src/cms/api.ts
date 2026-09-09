@@ -94,6 +94,8 @@ export type TextEntry = {
   description: string
   body?: string
   created_at: string
+  coverMediaId?: string
+  coverUrl?: string
 }
 
 export async function apiListTexts() {
@@ -104,7 +106,12 @@ export async function apiGetText(id: string) {
   return request<{ text: TextEntry }>(`/api/texts/${id}`)
 }
 
-export async function apiCreateText(payload: { title: string; description: string; body: string }) {
+export async function apiCreateText(payload: {
+  title: string
+  description: string
+  body: string
+  coverMediaId?: string
+}) {
   return request<{ text: TextEntry }>('/api/texts', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -113,7 +120,7 @@ export async function apiCreateText(payload: { title: string; description: strin
 
 export async function apiSaveText(
   id: string,
-  payload: { title: string; description: string; body: string },
+  payload: { title: string; description: string; body: string; coverMediaId?: string },
 ) {
   return request<{ text: TextEntry }>(`/api/texts/${id}`, {
     method: 'PUT',
