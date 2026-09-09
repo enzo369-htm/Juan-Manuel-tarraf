@@ -1,5 +1,7 @@
 import { useState, type CSSProperties, type PointerEvent } from 'react'
 import type { SectionId, Work } from '../data/works'
+import { useLanguage } from '../i18n/LanguageContext'
+import { navLabel } from '../i18n/ui'
 
 type Props = {
   work: Work
@@ -24,8 +26,10 @@ export function WorkPiece({
   onResizeStart,
   onSelect,
 }: Props) {
+  const { lang } = useLanguage()
   const [loaded, setLoaded] = useState(false)
   const [failed, setFailed] = useState(false)
+  const label = variant === 'admin' ? work.label : navLabel(work.id, lang)
 
   const style = {
     left: work.x,
@@ -50,7 +54,7 @@ export function WorkPiece({
       type="button"
       className={className}
       style={style}
-      aria-label={work.label}
+      aria-label={label}
       data-piece-id={work.id}
       onPointerDown={(e) => {
         e.stopPropagation()
@@ -93,7 +97,7 @@ export function WorkPiece({
           />
         )}
       </span>
-      <span className="work-piece__label">{work.label}</span>
+      <span className="work-piece__label">{label}</span>
     </button>
   )
 }

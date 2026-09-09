@@ -14,6 +14,7 @@ import {
   type CanvasPiece,
   type SectionCanvas,
 } from './api'
+import { BilingualField } from './BilingualField'
 
 const MAX_PER_KIND = 4
 
@@ -31,7 +32,9 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
   const navigate = useNavigate()
   const [heading, setHeading] = useState(section?.label ?? slug)
   const [title, setTitle] = useState('')
+  const [titleEn, setTitleEn] = useState('')
   const [description, setDescription] = useState('')
+  const [descriptionEn, setDescriptionEn] = useState('')
   const [coverUrl, setCoverUrl] = useState('')
   const [coverMediaId, setCoverMediaId] = useState('')
   const [canvases, setCanvases] = useState<SectionCanvas[]>([])
@@ -56,7 +59,9 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
     if (!exhibitionId) {
       setHeading(section?.label ?? slug)
       setTitle('')
+      setTitleEn('')
       setDescription('')
+      setDescriptionEn('')
       setCoverUrl('')
       setCoverMediaId('')
       return
@@ -65,7 +70,9 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
       .then((data) => {
         setHeading(data.exhibition.title)
         setTitle(data.exhibition.title)
+        setTitleEn(data.exhibition.titleEn ?? '')
         setDescription(data.exhibition.description)
+        setDescriptionEn(data.exhibition.descriptionEn ?? '')
         setCoverUrl(data.exhibition.coverUrl ?? '')
         setCoverMediaId(data.exhibition.coverMediaId ?? '')
       })
@@ -101,10 +108,15 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
         const savedExpo = await apiSaveExhibition(exhibitionId, {
           title: title.trim(),
           description,
+          titleEn,
+          descriptionEn,
           ...(coverMediaId ? { coverMediaId } : {}),
         })
         setHeading(savedExpo.exhibition.title)
         setTitle(savedExpo.exhibition.title)
+        setTitleEn(savedExpo.exhibition.titleEn ?? '')
+        setDescription(savedExpo.exhibition.description)
+        setDescriptionEn(savedExpo.exhibition.descriptionEn ?? '')
         setCoverUrl(savedExpo.exhibition.coverUrl ?? coverUrl)
         setCoverMediaId(savedExpo.exhibition.coverMediaId ?? coverMediaId)
       }
@@ -272,26 +284,23 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
 
       {slug === 'trabajos' ? (
         <div className={`admin-ficha${selected ? '' : ' is-idle'}`}>
-          <label htmlFor="ficha-tecnica">Ficha técnica</label>
-          <textarea
-            id="ficha-tecnica"
-            className="admin-ficha__text"
-            disabled={!selected}
-            value={
+          <BilingualField
+            label="Ficha técnica"
+            es={
               selected
                 ? (canvases
                     .find((canvas) => canvas.id === selected.canvasId)
                     ?.pieces.find((piece) => piece.id === selected.pieceId)?.ficha ?? '')
                 : ''
             }
-            maxLength={2000}
-            rows={4}
-            placeholder={
+            en={
               selected
-                ? 'Un solo texto. Se ve a la izquierda al abrir la pintura.'
-                : 'Seleccioná una pintura para añadir su ficha.'
+                ? (canvases
+                    .find((canvas) => canvas.id === selected.canvasId)
+                    ?.pieces.find((piece) => piece.id === selected.pieceId)?.fichaEn ?? '')
+                : ''
             }
-            onChange={(e) => {
+            onEs={(value) => {
               if (!selected) return
               markDirty(
                 canvases.map((item) =>
@@ -299,15 +308,43 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
                     ? {
                         ...item,
                         pieces: item.pieces.map((piece) =>
-                          piece.id === selected.pieceId
-                            ? { ...piece, ficha: e.target.value }
-                            : piece,
+                          piece.id === selected.pieceId ? { ...piece, ficha: value } : piece,
                         ),
                       }
                     : item,
                 ),
               )
             }}
+            onEn={(value) => {
+              if (!selected) return
+              markDirty(
+                canvases.map((item) =>
+                  item.id === selected.canvasId
+                    ? {
+                        ...item,
+                        pieces: item.pieces.map((piece) =>
+                          piece.id === selected.pieceId ? { ...piece, fichaEn: value } : piece,
+                        ),
+                      }
+                    : item,
+                ),
+              )
+            }}
+            multiline
+            rows={4}
+            maxLength={2000}
+            disabled={!selected}
+            inputClass="admin-ficha__text"
+            placeholderEs={
+              selected
+                ? 'Un solo texto. Se ve a la izquierda al abrir la pintura.'
+                : 'Seleccioná una pintura para añadir su ficha.'
+            }
+            placeholderEn={
+              selected
+                ? 'A single text. Shown on the left when the painting opens.'
+                : 'Select a painting to add its caption.'
+            }
           />
         </div>
       ) : null}
@@ -316,33 +353,42 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
         {exhibitionId ? (
           <div className="admin-expo-meta">
             <p className="admin-bar__kicker">Vidriera</p>
-            <label className="admin-login__label">
-              Título
-              <input
-                className="admin-series-text__title"
-                value={title}
-                maxLength={200}
-                onChange={(e) => {
-                  setTitle(e.target.value)
-                  setHeading(e.target.value || 'Exposición')
-                  markMetaDirty()
-                }}
-              />
-            </label>
-            <label className="admin-login__label">
-              Extracto
-              <textarea
-                className="admin-series-text__body"
-                value={description}
-                maxLength={500}
-                rows={4}
-                placeholder="Texto corto que se ve junto a la portada en el muestrario."
-                onChange={(e) => {
-                  setDescription(e.target.value)
-                  markMetaDirty()
-                }}
-              />
-            </label>
+            <BilingualField
+              label="Título"
+              es={title}
+              en={titleEn}
+              onEs={(value) => {
+                setTitle(value)
+                setHeading(value || 'Exposición')
+                markMetaDirty()
+              }}
+              onEn={(value) => {
+                setTitleEn(value)
+                markMetaDirty()
+              }}
+              maxLength={200}
+              required
+              inputClass="admin-series-text__title"
+            />
+            <BilingualField
+              label="Extracto"
+              es={description}
+              en={descriptionEn}
+              onEs={(value) => {
+                setDescription(value)
+                markMetaDirty()
+              }}
+              onEn={(value) => {
+                setDescriptionEn(value)
+                markMetaDirty()
+              }}
+              multiline
+              rows={4}
+              maxLength={500}
+              inputClass="admin-series-text__body"
+              placeholderEs="Texto corto que se ve junto a la portada en el muestrario."
+              placeholderEn="Short text shown next to the cover in the index."
+            />
             <div className="admin-expo-cover">
               <div className="admin-expo-cover__frame">
                 {coverUrl ? <img src={coverUrl} alt="" /> : <span>Sin portada</span>}
@@ -391,32 +437,53 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
                   Quitar
                 </button>
               </div>
-              <input
-                className="admin-series-text__title"
-                value={canvas.title ?? ''}
+              <BilingualField
+                label=""
+                es={canvas.title ?? ''}
+                en={canvas.titleEn ?? ''}
+                onEs={(value) =>
+                  markDirty(
+                    canvases.map((item) =>
+                      item.id === canvas.id ? { ...item, title: value } : item,
+                    ),
+                  )
+                }
+                onEn={(value) =>
+                  markDirty(
+                    canvases.map((item) =>
+                      item.id === canvas.id ? { ...item, titleEn: value } : item,
+                    ),
+                  )
+                }
                 maxLength={200}
-                placeholder={exhibitionId ? 'Título de sección (opcional)' : 'Título'}
-                onChange={(e) =>
-                  markDirty(
-                    canvases.map((item) =>
-                      item.id === canvas.id ? { ...item, title: e.target.value } : item,
-                    ),
-                  )
-                }
+                inputClass="admin-series-text__title"
+                placeholderEs={exhibitionId ? 'Título de sección (opcional)' : 'Título'}
+                placeholderEn={exhibitionId ? 'Section title (optional)' : 'Title'}
               />
-              <textarea
-                className="admin-series-text__body"
-                value={canvas.description ?? ''}
-                maxLength={6000}
-                placeholder="Descripción corta"
-                rows={4}
-                onChange={(e) =>
+              <BilingualField
+                label=""
+                es={canvas.description ?? ''}
+                en={canvas.descriptionEn ?? ''}
+                onEs={(value) =>
                   markDirty(
                     canvases.map((item) =>
-                      item.id === canvas.id ? { ...item, description: e.target.value } : item,
+                      item.id === canvas.id ? { ...item, description: value } : item,
                     ),
                   )
                 }
+                onEn={(value) =>
+                  markDirty(
+                    canvases.map((item) =>
+                      item.id === canvas.id ? { ...item, descriptionEn: value } : item,
+                    ),
+                  )
+                }
+                multiline
+                rows={4}
+                maxLength={6000}
+                inputClass="admin-series-text__body"
+                placeholderEs="Descripción corta"
+                placeholderEn="Short description"
               />
             </article>
           ) : (

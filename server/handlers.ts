@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { sql } from './db'
 import { hasDatabase, hasR2 } from './env'
+import { ensureI18nColumns } from './i18n-schema'
 import {
   type ApiRequest,
   type ApiResponse,
@@ -61,12 +62,13 @@ type PlaceRow = {
   z_index: number
   url: string
   ficha?: string | null
+  ficha_en?: string | null
 }
 
 async function readPlacementRows(db: ReturnType<typeof sql>, slug: string) {
   try {
     return (await db`
-      select p.id, p.canvas_id, p.media_id, p.x, p.y, p.width, p.z_index, p.ficha, m.url
+      select p.id, p.canvas_id, p.media_id, p.x, p.y, p.width, p.z_index, p.ficha, p.ficha_en, m.url
       from placements p
       join media m on m.id = p.media_id
       where p.section_slug = ${slug}
@@ -87,6 +89,8 @@ function toExhibition(row: {
   id: string
   title: string
   description: string
+  title_en?: string | null
+  description_en?: string | null
   sort_order: number
   created_at: string
   cover_media_id: string | null
@@ -96,6 +100,8 @@ function toExhibition(row: {
     id: row.id,
     title: row.title,
     description: row.description,
+    titleEn: row.title_en ?? '',
+    descriptionEn: row.description_en ?? '',
     sortOrder: row.sort_order,
     createdAt: row.created_at,
     coverMediaId: row.cover_media_id || undefined,
@@ -132,6 +138,9 @@ type TextRow = {
   title: string
   description: string
   body?: string
+  title_en?: string | null
+  description_en?: string | null
+  body_en?: string | null
   created_at: string
   cover_media_id?: string | null
   cover_url?: string | null
@@ -143,6 +152,9 @@ function toText(row: TextRow) {
     title: row.title,
     description: row.description,
     body: row.body,
+    titleEn: row.title_en ?? '',
+    descriptionEn: row.description_en ?? '',
+    bodyEn: row.body_en ?? '',
     created_at: row.created_at,
     coverMediaId: row.cover_media_id || undefined,
     coverUrl: row.cover_url || undefined,
@@ -225,6 +237,13 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
   const path = pathOf(req)
 
   try {
+    if (hasDatabase() && path.startsWith('/api/')) {
+      try {
+        await ensureI18nColumns(sql())
+      } catch {
+        /* schema still incomplete */
+      }
+    }
     if (path === '/api/auth/login' && method === 'POST') {
       const body = await readJson<{ password?: string }>(req)
       const expected = process.env.ADMIN_PASSWORD || (process.env.NODE_ENV === 'production' ? '' : 'tarraf')
@@ -358,6 +377,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
       row?: {
         slug: string
         body: string
+        body_en?: string | null
         portrait_url?: string | null
         instagram_handle?: string | null
         instagram_url?: string | null
@@ -367,6 +387,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
     ) => ({
       slug: row?.slug ?? slug,
       body: row?.body ?? '',
+      bodyEn: row?.body_en ?? '',
       portraitUrl: row?.portrait_url ?? '',
       instagramHandle: row?.instagram_handle ?? '',
       instagramUrl: row?.instagram_url ?? '',
@@ -380,7 +401,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
       }
       try {
         const rows = (await sql()`
-          select section_slug as slug, body, portrait_url, instagram_handle, instagram_url, email, portrait_scale
+          select section_slug as slug, body, body_en, portrait_url, instagram_handle, instagram_url, email, portrait_scale
           from section_copy
           where section_slug = ${copyMatch[1]}
         `) as {
@@ -398,7 +419,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
           await ensureContactColumns(sql())
           await ensurePortraitScale(sql())
           const rows = (await sql()`
-            select section_slug as slug, body, portrait_url, instagram_handle, instagram_url, email, portrait_scale
+            select section_slug as slug, body, body_en, portrait_url, instagram_handle, instagram_url, email, portrait_scale
             from section_copy
             where section_slug = ${copyMatch[1]}
           `) as {
@@ -438,6 +459,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
       }
       const body = await readJson<{
         body?: string
+        bodyEn?: string
         portraitUrl?: string
         portraitScale?: number
         instagramHandle?: string
@@ -481,16 +503,18 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         return
       }
       const text = body.body ?? ''
+      const textEn = typeof body.bodyEn === 'string' ? body.bodyEn : ''
       const portraitUrl =
         slug === 'bio' && typeof body.portraitUrl === 'string' ? body.portraitUrl : null
       if (portraitUrl !== null) {
         const portraitScale = clampPortraitScale(body.portraitScale)
         const saveBio = async () => {
           await db`
-            insert into section_copy (section_slug, body, portrait_url, portrait_scale)
-            values (${slug}, ${text}, ${portraitUrl}, ${portraitScale})
+            insert into section_copy (section_slug, body, body_en, portrait_url, portrait_scale)
+            values (${slug}, ${text}, ${textEn}, ${portraitUrl}, ${portraitScale})
             on conflict (section_slug) do update
             set body = excluded.body,
+                body_en = excluded.body_en,
                 portrait_url = excluded.portrait_url,
                 portrait_scale = excluded.portrait_scale
           `
@@ -504,17 +528,18 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         sendJson(res, 200, toCopy(slug, {
           slug,
           body: text,
+          body_en: textEn,
           portrait_url: portraitUrl,
           portrait_scale: portraitScale,
         }))
         return
       }
       await db`
-        insert into section_copy (section_slug, body)
-        values (${slug}, ${text})
-        on conflict (section_slug) do update set body = excluded.body
+        insert into section_copy (section_slug, body, body_en)
+        values (${slug}, ${text}, ${textEn})
+        on conflict (section_slug) do update set body = excluded.body, body_en = excluded.body_en
       `
-      sendJson(res, 200, toCopy(slug, { slug, body: text }))
+      sendJson(res, 200, toCopy(slug, { slug, body: text, body_en: textEn }))
       return
     }
 
@@ -534,22 +559,24 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         kind?: string | null
         title?: string | null
         description?: string | null
+        title_en?: string | null
+        description_en?: string | null
       }[] = []
       try {
         canvasRows = exhibitionId
           ? ((await db`
-              select id, height_ratio, kind, title, description from section_canvases
+              select id, height_ratio, kind, title, description, title_en, description_en from section_canvases
               where section_slug = ${placeMatch[1]} and exhibition_id = ${exhibitionId}
               order by sort_order
             `) as typeof canvasRows)
           : placeMatch[1] === 'exposiciones'
             ? ((await db`
-                select id, height_ratio, kind, title, description from section_canvases
+                select id, height_ratio, kind, title, description, title_en, description_en from section_canvases
                 where section_slug = ${placeMatch[1]} and exhibition_id is null
                 order by sort_order
               `) as typeof canvasRows)
             : ((await db`
-                select id, height_ratio, kind, title, description from section_canvases
+                select id, height_ratio, kind, title, description, title_en, description_en from section_canvases
                 where section_slug = ${placeMatch[1]}
                 order by sort_order
               `) as typeof canvasRows)
@@ -574,6 +601,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         width: row.width > 100 ? 24 : row.width,
         z: row.z_index,
         ficha: row.ficha ?? '',
+        fichaEn: row.ficha_en ?? '',
       })
       const canvases = canvasRows.map((canvas, index) => {
         const kind = canvas.kind === 'text' ? 'text' : 'canvas'
@@ -582,6 +610,8 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
           kind,
           title: canvas.title ?? '',
           description: canvas.description ?? '',
+          titleEn: canvas.title_en ?? '',
+          descriptionEn: canvas.description_en ?? '',
           heightRatio: canvas.height_ratio ?? 1.2,
           pieces:
             kind === 'text'
@@ -640,13 +670,29 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
               insert into section_canvases
                 (section_slug, exhibition_id, sort_order, height_ratio, kind, title, description)
               values (${placeMatch[1]}, ${exhibitionId}, ${existing.length}, 1.2, ${kind}, '', '')
-              returning id, height_ratio, kind, title, description
-            `) as { id: string; height_ratio: number; kind: string; title: string; description: string }[])
+              returning id, height_ratio, kind, title, description, title_en, description_en
+            `) as {
+              id: string
+              height_ratio: number
+              kind: string
+              title: string
+              description: string
+              title_en?: string | null
+              description_en?: string | null
+            }[])
           : ((await db`
               insert into section_canvases (section_slug, sort_order, height_ratio, kind, title, description)
               values (${placeMatch[1]}, ${existing.length}, 1.2, ${kind}, '', '')
-              returning id, height_ratio, kind, title, description
-            `) as { id: string; height_ratio: number; kind: string; title: string; description: string }[])
+              returning id, height_ratio, kind, title, description, title_en, description_en
+            `) as {
+              id: string
+              height_ratio: number
+              kind: string
+              title: string
+              description: string
+              title_en?: string | null
+              description_en?: string | null
+            }[])
         const row = created[0]
         sendJson(res, 200, {
           canvas: {
@@ -654,6 +700,8 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
             kind: row.kind === 'text' ? 'text' : 'canvas',
             title: row.title ?? '',
             description: row.description ?? '',
+            titleEn: row.title_en ?? '',
+            descriptionEn: row.description_en ?? '',
             heightRatio: row.height_ratio,
             pieces: [],
           },
@@ -714,10 +762,12 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
           kind?: string
           title?: string
           description?: string
+          titleEn?: string
+          descriptionEn?: string
           heightRatio?: number
-          pieces?: { id: string; x: number; y: number; width: number; ficha?: string }[]
+          pieces?: { id: string; x: number; y: number; width: number; ficha?: string; fichaEn?: string }[]
         }[]
-        pieces?: { id: string; x: number; y: number; width: number; ficha?: string }[]
+        pieces?: { id: string; x: number; y: number; width: number; ficha?: string; fichaEn?: string }[]
         heightRatio?: number
       }>(req)
       const db = sql()
@@ -727,6 +777,9 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         const title = typeof canvas.title === 'string' ? canvas.title.slice(0, 200) : ''
         const description =
           typeof canvas.description === 'string' ? canvas.description.slice(0, 6000) : ''
+        const titleEn = typeof canvas.titleEn === 'string' ? canvas.titleEn.slice(0, 200) : ''
+        const descriptionEn =
+          typeof canvas.descriptionEn === 'string' ? canvas.descriptionEn.slice(0, 6000) : ''
         const ratio =
           typeof canvas.heightRatio === 'number' && Number.isFinite(canvas.heightRatio)
             ? Math.min(2.5, Math.max(0.6, canvas.heightRatio))
@@ -734,7 +787,11 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         try {
           await db`
             update section_canvases
-            set height_ratio = ${ratio}, title = ${title}, description = ${description}
+            set height_ratio = ${ratio},
+                title = ${title},
+                description = ${description},
+                title_en = ${titleEn},
+                description_en = ${descriptionEn}
             where id = ${canvas.id} and section_slug = ${placeMatch[1]}
           `
         } catch {
@@ -750,13 +807,15 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         if (canvas.kind === 'text' || !Array.isArray(canvas.pieces)) continue
         for (const piece of canvas.pieces) {
           const ficha = typeof piece.ficha === 'string' ? piece.ficha.slice(0, 2000) : ''
+          const fichaEn = typeof piece.fichaEn === 'string' ? piece.fichaEn.slice(0, 2000) : ''
           try {
             await db`
               update placements
               set x = ${piece.x},
                   y = ${piece.y},
                   width = ${piece.width},
-                  ficha = ${ficha}
+                  ficha = ${ficha},
+                  ficha_en = ${fichaEn}
               where id = ${piece.id} and section_slug = ${placeMatch[1]}
             `
           } catch {
@@ -841,7 +900,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         }
         try {
           const rows = (await sql()`
-            select e.id, e.title, e.description, e.sort_order, e.created_at,
+            select e.id, e.title, e.description, e.title_en, e.description_en, e.sort_order, e.created_at,
                    e.cover_media_id, m.url as cover_url
             from exhibitions e
             left join media m on m.id = e.cover_media_id
@@ -863,7 +922,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
       }
       try {
         const rows = (await sql()`
-          select e.id, e.title, e.description, e.sort_order, e.created_at,
+          select e.id, e.title, e.description, e.title_en, e.description_en, e.sort_order, e.created_at,
                  e.cover_media_id, m.url as cover_url
           from exhibitions e
           left join media m on m.id = e.cover_media_id
@@ -882,7 +941,13 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         sendJson(res, 503, { error: 'DATABASE_URL no configurada' })
         return
       }
-      const payload = await readJson<{ title?: string; description?: string; coverMediaId?: string }>(req)
+      const payload = await readJson<{
+        title?: string
+        description?: string
+        titleEn?: string
+        descriptionEn?: string
+        coverMediaId?: string
+      }>(req)
       const title = (payload.title ?? '').trim()
       if (!title) {
         sendJson(res, 400, { error: 'El título es obligatorio' })
@@ -895,13 +960,15 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
       try {
         const count = (await sql()`select count(*)::int as n from exhibitions`) as { n: number }[]
         const created = (await sql()`
-          insert into exhibitions (title, description, cover_media_id, sort_order)
-          values (${title}, ${payload.description ?? ''}, ${cover}, ${count[0]?.n ?? 0})
-          returning id, title, description, sort_order, created_at, cover_media_id
+          insert into exhibitions (title, description, title_en, description_en, cover_media_id, sort_order)
+          values (${title}, ${payload.description ?? ''}, ${payload.titleEn ?? ''}, ${payload.descriptionEn ?? ''}, ${cover}, ${count[0]?.n ?? 0})
+          returning id, title, description, title_en, description_en, sort_order, created_at, cover_media_id
         `) as {
           id: string
           title: string
           description: string
+          title_en?: string | null
+          description_en?: string | null
           sort_order: number
           created_at: string
           cover_media_id: string | null
@@ -941,7 +1008,13 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         }
         return
       }
-      const payload = await readJson<{ title?: string; description?: string; coverMediaId?: string }>(req)
+      const payload = await readJson<{
+        title?: string
+        description?: string
+        titleEn?: string
+        descriptionEn?: string
+        coverMediaId?: string
+      }>(req)
       const title = (payload.title ?? '').trim()
       if (!title) {
         sendJson(res, 400, { error: 'El título es obligatorio' })
@@ -957,6 +1030,8 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
               update exhibitions
               set title = ${title},
                   description = ${payload.description ?? ''},
+                  title_en = ${payload.titleEn ?? ''},
+                  description_en = ${payload.descriptionEn ?? ''},
                   cover_media_id = ${cover}
               where id = ${id}
               returning id
@@ -964,7 +1039,9 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
           : ((await sql()`
               update exhibitions
               set title = ${title},
-                  description = ${payload.description ?? ''}
+                  description = ${payload.description ?? ''},
+                  title_en = ${payload.titleEn ?? ''},
+                  description_en = ${payload.descriptionEn ?? ''}
               where id = ${id}
               returning id
             `) as { id: string }[])
@@ -973,7 +1050,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
           return
         }
         const rows = (await sql()`
-          select e.id, e.title, e.description, e.sort_order, e.created_at,
+          select e.id, e.title, e.description, e.title_en, e.description_en, e.sort_order, e.created_at,
                  e.cover_media_id, m.url as cover_url
           from exhibitions e
           left join media m on m.id = e.cover_media_id
@@ -993,7 +1070,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
       }
       try {
         const rows = (await sql()`
-          select t.id, t.title, t.description, t.created_at,
+          select t.id, t.title, t.description, t.title_en, t.description_en, t.created_at,
                  t.cover_media_id, m.url as cover_url
           from texts t
           left join media m on m.id = t.cover_media_id
@@ -1003,7 +1080,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
       } catch (error) {
         if (!isMissingTextCover(error)) throw error
         const rows = (await sql()`
-          select id, title, description, created_at from texts order by created_at desc
+          select id, title, description, title_en, description_en, created_at from texts order by created_at desc
         `) as TextRow[]
         sendJson(res, 200, { texts: rows.map(toText) })
       }
@@ -1020,6 +1097,9 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         title?: string
         description?: string
         body?: string
+        titleEn?: string
+        descriptionEn?: string
+        bodyEn?: string
         coverMediaId?: string
       }>(req)
       const title = (payload.title ?? '').trim()
@@ -1033,9 +1113,9 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
           : null
       try {
         const created = (await sql()`
-          insert into texts (title, description, body, cover_media_id)
-          values (${title}, ${payload.description ?? ''}, ${payload.body ?? ''}, ${cover})
-          returning id, title, description, body, created_at, cover_media_id
+          insert into texts (title, description, body, title_en, description_en, body_en, cover_media_id)
+          values (${title}, ${payload.description ?? ''}, ${payload.body ?? ''}, ${payload.titleEn ?? ''}, ${payload.descriptionEn ?? ''}, ${payload.bodyEn ?? ''}, ${cover})
+          returning id, title, description, body, title_en, description_en, body_en, created_at, cover_media_id
         `) as TextRow[]
         let coverUrl: string | undefined
         if (created[0]?.cover_media_id) {
@@ -1063,7 +1143,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
       }
       try {
         const rows = (await sql()`
-          select t.id, t.title, t.description, t.body, t.created_at,
+          select t.id, t.title, t.description, t.body, t.title_en, t.description_en, t.body_en, t.created_at,
                  t.cover_media_id, m.url as cover_url
           from texts t
           left join media m on m.id = t.cover_media_id
@@ -1077,7 +1157,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
       } catch (error) {
         if (!isMissingTextCover(error)) throw error
         const rows = (await sql()`
-          select id, title, description, body, created_at from texts where id = ${textMatch[1]}
+          select id, title, description, body, title_en, description_en, body_en, created_at from texts where id = ${textMatch[1]}
         `) as TextRow[]
         if (!rows[0]) {
           sendJson(res, 404, { error: 'No encontrado' })
@@ -1103,6 +1183,9 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         title?: string
         description?: string
         body?: string
+        titleEn?: string
+        descriptionEn?: string
+        bodyEn?: string
         coverMediaId?: string
       }>(req)
       const title = (payload.title ?? '').trim()
@@ -1121,6 +1204,9 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
               set title = ${title},
                   description = ${payload.description ?? ''},
                   body = ${payload.body ?? ''},
+                  title_en = ${payload.titleEn ?? ''},
+                  description_en = ${payload.descriptionEn ?? ''},
+                  body_en = ${payload.bodyEn ?? ''},
                   cover_media_id = ${cover}
               where id = ${textMatch[1]}
               returning id
@@ -1129,7 +1215,10 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
               update texts
               set title = ${title},
                   description = ${payload.description ?? ''},
-                  body = ${payload.body ?? ''}
+                  body = ${payload.body ?? ''},
+                  title_en = ${payload.titleEn ?? ''},
+                  description_en = ${payload.descriptionEn ?? ''},
+                  body_en = ${payload.bodyEn ?? ''}
               where id = ${textMatch[1]}
               returning id
             `) as { id: string }[])
@@ -1138,7 +1227,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
           return
         }
         const rows = (await sql()`
-          select t.id, t.title, t.description, t.body, t.created_at,
+          select t.id, t.title, t.description, t.body, t.title_en, t.description_en, t.body_en, t.created_at,
                  t.cover_media_id, m.url as cover_url
           from texts t
           left join media m on m.id = t.cover_media_id

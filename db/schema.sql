@@ -41,6 +41,8 @@ create table if not exists exhibitions (
   id uuid primary key default gen_random_uuid(),
   title text not null,
   description text not null default '',
+  title_en text not null default '',
+  description_en text not null default '',
   cover_media_id uuid references media (id) on delete set null,
   sort_order int not null default 0,
   created_at timestamptz not null default now()
@@ -54,7 +56,9 @@ create table if not exists section_canvases (
   height_ratio double precision not null default 1.2,
   kind text not null default 'canvas',
   title text not null default '',
-  description text not null default ''
+  description text not null default '',
+  title_en text not null default '',
+  description_en text not null default ''
 );
 
 create unique index if not exists section_canvases_exhibition_sort
@@ -71,12 +75,14 @@ create table if not exists placements (
   width double precision not null default 24,
   z_index int not null default 0,
   ficha text not null default '',
+  ficha_en text not null default '',
   created_at timestamptz not null default now()
 );
 
 create table if not exists section_copy (
   section_slug text primary key references sections (slug) on delete cascade,
   body text not null default '',
+  body_en text not null default '',
   portrait_url text,
   instagram_handle text not null default '',
   instagram_url text not null default '',
@@ -89,6 +95,9 @@ create table if not exists texts (
   title text not null,
   description text not null default '',
   body text not null default '',
+  title_en text not null default '',
+  description_en text not null default '',
+  body_en text not null default '',
   cover_media_id uuid references media (id) on delete set null,
   created_at timestamptz not null default now()
 );

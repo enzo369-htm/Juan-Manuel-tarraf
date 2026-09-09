@@ -1,9 +1,12 @@
+import { ensureI18nColumns } from '../../server/i18n-schema'
+
 const COOKIE = 'jt_admin'
 const COPY_SLUGS = new Set(['bio', 'textos', 'contacto'])
 
 type CopyRow = {
   slug: string
   body: string
+  body_en?: string | null
   portrait_url?: string | null
   instagram_handle?: string | null
   instagram_url?: string | null
@@ -52,6 +55,7 @@ function toCopy(slug: string, row?: CopyRow) {
   return {
     slug: row?.slug ?? slug,
     body: row?.body ?? '',
+    bodyEn: row?.body_en ?? '',
     portraitUrl: row?.portrait_url ?? '',
     instagramHandle: row?.instagram_handle ?? '',
     instagramUrl: row?.instagram_url ?? '',
@@ -86,6 +90,7 @@ export default {
 
       const { neon } = await import('@neondatabase/serverless')
       const sql = neon(dbUrl)
+      await ensureI18nColumns(sql)
 
       const ensureContactColumns = async () => {
         await sql`alter table section_copy add column if not exists instagram_handle text not null default ''`
@@ -100,7 +105,7 @@ export default {
       if (request.method === 'GET') {
         try {
           const rows = (await sql`
-            select section_slug as slug, body, portrait_url, instagram_handle, instagram_url, email, portrait_scale
+            select section_slug as slug, body, body_en, portrait_url, instagram_handle, instagram_url, email, portrait_scale
             from section_copy
             where section_slug = ${slug}
           `) as CopyRow[]
@@ -110,7 +115,7 @@ export default {
             await ensureContactColumns()
             await ensurePortraitScale()
             const rows = (await sql`
-              select section_slug as slug, body, portrait_url, instagram_handle, instagram_url, email, portrait_scale
+              select section_slug as slug, body, body_en, portrait_url, instagram_handle, instagram_url, email, portrait_scale
               from section_copy
               where section_slug = ${slug}
             `) as CopyRow[]
@@ -139,6 +144,7 @@ export default {
         }
         const payload = (await request.json().catch(() => ({}))) as {
           body?: string
+          bodyEn?: string
           portraitUrl?: string
           portraitScale?: number
           instagramHandle?: string
@@ -183,6 +189,7 @@ export default {
         }
 
         const text = typeof payload.body === 'string' ? payload.body : ''
+        const textEn = typeof payload.bodyEn === 'string' ? payload.bodyEn : ''
         const portraitUrl =
           slug === 'bio' && typeof payload.portraitUrl === 'string' ? payload.portraitUrl : null
 
@@ -190,12 +197,13 @@ export default {
           const portraitScale = clampPortraitScale(payload.portraitScale)
           const saveBio = async () => {
             await sql`
-              insert into section_copy (section_slug, body, portrait_url, portrait_scale)
-              values (${slug}, ${text}, ${portraitUrl}, ${portraitScale})
-              on conflict (section_slug) do update
-              set body = excluded.body,
-                  portrait_url = excluded.portrait_url,
-                  portrait_scale = excluded.portrait_scale
+            insert into section_copy (section_slug, body, body_en, portrait_url, portrait_scale)
+            values (${slug}, ${text}, ${textEn}, ${portraitUrl}, ${portraitScale})
+            on conflict (section_slug) do update
+            set body = excluded.body,
+                body_en = excluded.body_en,
+                portrait_url = excluded.portrait_url,
+                portrait_scale = excluded.portrait_scale
             `
           }
           try {
@@ -215,6 +223,7 @@ export default {
             toCopy(slug, {
               slug,
               body: text,
+              body_en: textEn,
               portrait_url: portraitUrl,
               portrait_scale: portraitScale,
             }),
@@ -222,9 +231,9 @@ export default {
         }
 
         await sql`
-          insert into section_copy (section_slug, body)
-          values (${slug}, ${text})
-          on conflict (section_slug) do update set body = excluded.body
+          insert into section_copy (section_slug, body, body_en)
+          values (${slug}, ${text}, ${textEn})
+          on conflict (section_slug) do update set body = excluded.body, body_en = excluded.body_en
         `
         try {
           const rows = (await sql`

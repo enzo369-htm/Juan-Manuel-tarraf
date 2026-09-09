@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getSection } from '../data/sections'
 import { apiGetCopy, apiSaveCopy, apiUploadMedia } from './api'
+import { BilingualField } from './BilingualField'
 
 type Props = {
   slug: string
@@ -10,6 +11,7 @@ export function AdminCopy({ slug }: Props) {
   const section = getSection(slug)
   const isBio = slug === 'bio'
   const [body, setBody] = useState('')
+  const [bodyEn, setBodyEn] = useState('')
   const [portraitUrl, setPortraitUrl] = useState('')
   const [portraitScale, setPortraitScale] = useState(100)
   const [status, setStatus] = useState('Listo')
@@ -19,11 +21,13 @@ export function AdminCopy({ slug }: Props) {
     void apiGetCopy(slug)
       .then((data) => {
         setBody(data.body)
+        setBodyEn(data.bodyEn ?? '')
         setPortraitUrl(data.portraitUrl ?? '')
         setPortraitScale(data.portraitScale ?? 100)
       })
       .catch(() => {
         setBody('')
+        setBodyEn('')
         setPortraitUrl('')
         setPortraitScale(100)
       })
@@ -34,6 +38,7 @@ export function AdminCopy({ slug }: Props) {
     try {
       await apiSaveCopy(slug, {
         body,
+        bodyEn,
         ...(isBio ? { portraitUrl, portraitScale } : {}),
       })
       setStatus('Guardado')
@@ -72,11 +77,17 @@ export function AdminCopy({ slug }: Props) {
         </div>
       </header>
       <div className={isBio ? 'admin-bio' : undefined}>
-        <textarea
-          className="admin-copy"
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          placeholder="Texto de la sección…"
+        <BilingualField
+          label=""
+          es={body}
+          en={bodyEn}
+          onEs={setBody}
+          onEn={setBodyEn}
+          multiline
+          rows={16}
+          inputClass="admin-copy"
+          placeholderEs="Texto de la sección…"
+          placeholderEn="Section text…"
         />
         {isBio && (
           <div className="admin-bio__photo">

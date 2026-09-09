@@ -1,3 +1,5 @@
+import { useLanguage } from '../i18n/LanguageContext'
+
 type Props = {
   instagramHandle: string
   instagramUrl: string
@@ -31,6 +33,7 @@ function MailIcon() {
 }
 
 export function ContactView({ instagramHandle, instagramUrl, email }: Props) {
+  const { ui } = useLanguage()
   const igHref = hrefOf(instagramUrl)
   const igLabel = instagramHandle.trim()
   const mail = email.trim()
@@ -41,7 +44,7 @@ export function ContactView({ instagramHandle, instagramUrl, email }: Props) {
     return (
       <div className="contact">
         <p className="section-view__note">
-          Espacio de contacto. El contenido se carga desde el CMS.
+          {ui.contactEmpty}
         </p>
       </div>
     )

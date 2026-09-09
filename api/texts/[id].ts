@@ -1,3 +1,5 @@
+import { ensureI18nColumns } from '../../server/i18n-schema'
+
 const COOKIE = 'jt_admin'
 
 function cookies(header: string) {
@@ -55,6 +57,9 @@ type TextRow = {
   title: string
   description: string
   body?: string
+  title_en?: string | null
+  description_en?: string | null
+  body_en?: string | null
   created_at: string
   cover_media_id?: string | null
   cover_url?: string | null
@@ -66,6 +71,9 @@ function toText(row: TextRow) {
     title: row.title,
     description: row.description,
     body: row.body,
+    titleEn: row.title_en ?? '',
+    descriptionEn: row.description_en ?? '',
+    bodyEn: row.body_en ?? '',
     created_at: row.created_at,
     coverMediaId: row.cover_media_id || undefined,
     coverUrl: row.cover_url || undefined,
@@ -86,11 +94,12 @@ export default {
       }
       const { neon } = await import('@neondatabase/serverless')
       const sql = neon(dbUrl)
+      await ensureI18nColumns(sql)
 
       if (request.method === 'GET') {
         try {
           const rows = (await sql`
-            select t.id, t.title, t.description, t.body, t.created_at,
+            select t.id, t.title, t.description, t.body, t.title_en, t.description_en, t.body_en, t.created_at,
                    t.cover_media_id, m.url as cover_url
             from texts t
             left join media m on m.id = t.cover_media_id
@@ -123,6 +132,9 @@ export default {
           title?: string
           description?: string
           body?: string
+          titleEn?: string
+          descriptionEn?: string
+          bodyEn?: string
           coverMediaId?: string
         }
         const title = (body.title ?? '').trim()
@@ -140,6 +152,9 @@ export default {
                 set title = ${title},
                     description = ${body.description ?? ''},
                     body = ${body.body ?? ''},
+                    title_en = ${body.titleEn ?? ''},
+                    description_en = ${body.descriptionEn ?? ''},
+                    body_en = ${body.bodyEn ?? ''},
                     cover_media_id = ${cover}
                 where id = ${id}
                 returning id
@@ -148,7 +163,10 @@ export default {
                 update texts
                 set title = ${title},
                     description = ${body.description ?? ''},
-                    body = ${body.body ?? ''}
+                    body = ${body.body ?? ''},
+                    title_en = ${body.titleEn ?? ''},
+                    description_en = ${body.descriptionEn ?? ''},
+                    body_en = ${body.bodyEn ?? ''}
                 where id = ${id}
                 returning id
               `) as { id: string }[])
@@ -156,7 +174,7 @@ export default {
             return Response.json({ error: 'No encontrado' }, { status: 404 })
           }
           const rows = (await sql`
-            select t.id, t.title, t.description, t.body, t.created_at,
+            select t.id, t.title, t.description, t.body, t.title_en, t.description_en, t.body_en, t.created_at,
                    t.cover_media_id, m.url as cover_url
             from texts t
             left join media m on m.id = t.cover_media_id

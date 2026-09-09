@@ -1,3 +1,5 @@
+import { ensureI18nColumns } from '../../server/i18n-schema'
+
 const COOKIE = 'jt_admin'
 const CANVAS_SLUGS = new Set(['trabajos', 'exposiciones', 'archivos'])
 const MAX_PER_KIND = 4
@@ -61,6 +63,7 @@ type PlaceRow = {
   z_index: number
   url: string
   ficha?: string | null
+  ficha_en?: string | null
 }
 
 type CanvasRow = {
@@ -70,6 +73,8 @@ type CanvasRow = {
   kind?: string | null
   title?: string | null
   description?: string | null
+  title_en?: string | null
+  description_en?: string | null
 }
 
 function clampPct(value: number, min: number, max: number) {
@@ -87,7 +92,7 @@ async function readPlacementRows(
 ) {
   try {
     return (await sql`
-      select p.id, p.canvas_id, p.media_id, p.x, p.y, p.width, p.z_index, p.ficha, m.url
+      select p.id, p.canvas_id, p.media_id, p.x, p.y, p.width, p.z_index, p.ficha, p.ficha_en, m.url
       from placements p
       join media m on m.id = p.media_id
       where p.section_slug = ${slug}
@@ -118,6 +123,7 @@ function toPieces(rows: PlaceRow[]) {
       width: legacy ? 24 : row.width,
       z: row.z_index,
       ficha: row.ficha ?? '',
+      fichaEn: row.ficha_en ?? '',
     }
   })
 }
@@ -129,6 +135,8 @@ function toBlock(canvas: CanvasRow, pieces: ReturnType<typeof toPieces>) {
     kind,
     title: canvas.title ?? '',
     description: canvas.description ?? '',
+    titleEn: canvas.title_en ?? '',
+    descriptionEn: canvas.description_en ?? '',
     heightRatio: canvas.height_ratio ?? 1.2,
     pieces: kind === 'text' ? [] : pieces,
   }
@@ -143,20 +151,20 @@ async function readCanvases(
   try {
     canvasRows = exhibitionId
       ? ((await sql`
-          select id, sort_order, height_ratio, kind, title, description
+          select id, sort_order, height_ratio, kind, title, description, title_en, description_en
           from section_canvases
           where section_slug = ${slug} and exhibition_id = ${exhibitionId}
           order by sort_order
         `) as CanvasRow[])
       : slug === 'exposiciones'
         ? ((await sql`
-            select id, sort_order, height_ratio, kind, title, description
+            select id, sort_order, height_ratio, kind, title, description, title_en, description_en
             from section_canvases
             where section_slug = ${slug} and exhibition_id is null
             order by sort_order
           `) as CanvasRow[])
         : ((await sql`
-            select id, sort_order, height_ratio, kind, title, description
+            select id, sort_order, height_ratio, kind, title, description, title_en, description_en
             from section_canvases
             where section_slug = ${slug}
             order by sort_order
@@ -206,6 +214,7 @@ export default {
 
       const { neon } = await import('@neondatabase/serverless')
       const sql = neon(dbUrl)
+      await ensureI18nColumns(sql)
 
       if (request.method === 'GET') {
         const exhibitionId = exhibitionIdOf(request)
@@ -325,12 +334,15 @@ export default {
           y: number
           width: number
           ficha?: string
+          fichaEn?: string
         }
         type BlockIn = {
           id: string
           kind?: string
           title?: string
           description?: string
+          titleEn?: string
+          descriptionEn?: string
           heightRatio?: number
           pieces?: PieceIn[]
         }
@@ -357,6 +369,11 @@ export default {
           const title = clip(typeof canvas.title === 'string' ? canvas.title : '', 200)
           const description = clip(
             typeof canvas.description === 'string' ? canvas.description : '',
+            6000,
+          )
+          const titleEn = clip(typeof canvas.titleEn === 'string' ? canvas.titleEn : '', 200)
+          const descriptionEn = clip(
+            typeof canvas.descriptionEn === 'string' ? canvas.descriptionEn : '',
             6000,
           )
           const ratio =
@@ -388,7 +405,9 @@ export default {
               set height_ratio = ${ratio},
                   sort_order = ${i},
                   title = ${title},
-                  description = ${description}
+                  description = ${description},
+                  title_en = ${titleEn},
+                  description_en = ${descriptionEn}
               where id = ${canvasId} and section_slug = ${slug}
             `
           } catch {
@@ -415,6 +434,7 @@ export default {
             const y = clampPct(piece.y, 0, 98)
             const width = clampPct(piece.width, 5, 90)
             const ficha = clip(typeof piece.ficha === 'string' ? piece.ficha : '', 2000)
+            const fichaEn = clip(typeof piece.fichaEn === 'string' ? piece.fichaEn : '', 2000)
             if (isUuid(piece.id)) {
               try {
                 await sql`
@@ -423,7 +443,8 @@ export default {
                       y = ${y},
                       width = ${width},
                       canvas_id = ${canvasId},
-                      ficha = ${ficha}
+                      ficha = ${ficha},
+                      ficha_en = ${fichaEn}
                   where id = ${piece.id} and section_slug = ${slug}
                 `
               } catch {

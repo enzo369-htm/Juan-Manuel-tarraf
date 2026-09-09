@@ -266,6 +266,62 @@ html.page-scroll #root {
   color: var(--ink);
 }
 
+.site-nav__end {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.9rem 1.5rem;
+}
+
+.lang-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+  user-select: none;
+}
+
+.lang-switch button {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--mute);
+  cursor: pointer;
+  font: inherit;
+}
+
+.lang-switch button.is-on,
+.lang-switch button:hover {
+  color: var(--ink);
+}
+
+.lang-switch span {
+  color: var(--mute);
+}
+
+.hero__lang {
+  position: absolute;
+  top: 1.25rem;
+  right: 2.4rem;
+  pointer-events: auto;
+  color: var(--hero-label, var(--ink));
+}
+
+.hero__lang button,
+.hero__lang span {
+  color: inherit;
+  opacity: 0.55;
+}
+
+.hero__lang button.is-on,
+.hero__lang button:hover {
+  opacity: 1;
+}
+
 .site-nav__list {
   display: flex;
   flex-wrap: wrap;

@@ -21,6 +21,7 @@ function toItems(pieces: CanvasPiece[]): CanvasItem[] {
     y: piece.y,
     width: piece.width,
     ficha: piece.ficha,
+    fichaEn: piece.fichaEn,
   }))
 }
 
@@ -36,6 +37,7 @@ function toPieces(items: CanvasItem[], previous: CanvasPiece[]): CanvasPiece[] {
       z: prior?.z,
       mediaId: prior?.mediaId,
       ficha: prior?.ficha ?? item.ficha,
+      fichaEn: prior?.fichaEn ?? item.fichaEn,
     }
   })
 }

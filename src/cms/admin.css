@@ -591,7 +591,8 @@
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  max-width: 36rem;
+  max-width: 52rem;
+  width: 100%;
   flex-shrink: 0;
 }
 
@@ -1011,5 +1012,54 @@
 
   .admin-bar__actions {
     flex-wrap: wrap;
+  }
+}
+
+.admin-i18n {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.admin-i18n__label {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+
+.admin-i18n__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.85rem 1.1rem;
+}
+
+.admin-i18n__grid .admin-login__label,
+.admin-i18n__grid .admin-copy,
+.admin-i18n__grid input,
+.admin-i18n__grid textarea {
+  width: 100%;
+}
+
+.admin-bio .admin-i18n,
+.admin-bio .admin-i18n__grid {
+  min-height: 0;
+  height: 100%;
+}
+
+.admin-bio .admin-i18n__grid textarea {
+  min-height: 0;
+  height: 100%;
+}
+
+.admin-ficha.is-idle .admin-i18n textarea {
+  opacity: 0.55;
+}
+
+@media (max-width: 720px) {
+  .admin-i18n__grid {
+    grid-template-columns: 1fr;
   }
 }

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { CanvasViewer } from '../canvas/CanvasViewer'
-import { apiGetExhibition, apiGetPlacements, type SectionCanvas } from '../cms/api'
+import { apiGetExhibition, apiGetPlacements, type Exhibition, type SectionCanvas } from '../cms/api'
+import { pick } from '../i18n/lang'
+import { useLanguage } from '../i18n/LanguageContext'
 import { SiteNav } from './SiteNav'
 
 function sameTitle(a?: string, b?: string) {
@@ -11,7 +13,8 @@ function sameTitle(a?: string, b?: string) {
 
 export function ExhibitionDetail() {
   const { exhibitionId } = useParams()
-  const [title, setTitle] = useState('')
+  const { lang, ui } = useLanguage()
+  const [exhibition, setExhibition] = useState<Exhibition | null>(null)
   const [canvases, setCanvases] = useState<SectionCanvas[]>([])
   const [ready, setReady] = useState(false)
   const [error, setError] = useState('')
@@ -24,10 +27,10 @@ export function ExhibitionDetail() {
 
     const meta = apiGetExhibition(exhibitionId)
       .then((data) => {
-        if (!cancelled) setTitle(data.exhibition.title)
+        if (!cancelled) setExhibition(data.exhibition)
       })
       .catch(() => {
-        if (!cancelled) setError('Esa exposición no está.')
+        if (!cancelled) setError('missing')
       })
 
     const blocks = apiGetPlacements('exposiciones', exhibitionId)
@@ -47,36 +50,37 @@ export function ExhibitionDetail() {
     }
   }, [exhibitionId])
 
-  const hasContent = canvases.some(
-    (block) =>
-      (block.kind === 'text' && (block.title || block.description)) ||
-      (block.kind !== 'text' && block.pieces.length > 0),
-  )
+  const title = pick(exhibition?.title, exhibition?.titleEn, lang)
+  const hasContent = canvases.some((block) => {
+    if (block.kind === 'text') {
+      return Boolean(pick(block.title, block.titleEn, lang) || pick(block.description, block.descriptionEn, lang))
+    }
+    return block.pieces.length > 0
+  })
 
   return (
-    <section className="section-view" aria-label={title || 'Exposición'}>
+    <section className="section-view" aria-label={title || ui.exhibitions}>
       <SiteNav />
 
       {!ready ? null : error ? (
         <p className="section-view__note">
-          {error}{' '}
-          <Link to="/exposiciones">Volver a exposiciones</Link>
+          {error === 'missing' ? ui.exhibitionMissing : error}{' '}
+          <Link to="/exposiciones">{ui.backToExhibitions}</Link>
         </p>
       ) : (
         <div className="section-view__body expos-detail">
           {title ? <h1 className="expos-detail__title">{title}</h1> : null}
           {canvases.map((block, index) => {
             if (block.kind === 'text') {
+              const blockTitle = pick(block.title, block.titleEn, lang)
+              const description = pick(block.description, block.descriptionEn, lang)
               const isFirstText = !canvases.slice(0, index).some((item) => item.kind === 'text')
-              const showHeading =
-                Boolean(block.title) && !isFirstText && !sameTitle(block.title, title)
-              if (!showHeading && !block.description) return null
+              const showHeading = Boolean(blockTitle) && !isFirstText && !sameTitle(blockTitle, title)
+              if (!showHeading && !description) return null
               return (
                 <div key={block.id} className="series-intro">
-                  {showHeading ? <h2 className="series-intro__title">{block.title}</h2> : null}
-                  {block.description ? (
-                    <p className="series-intro__text">{block.description}</p>
-                  ) : null}
+                  {showHeading ? <h2 className="series-intro__title">{blockTitle}</h2> : null}
+                  {description ? <p className="series-intro__text">{description}</p> : null}
                 </div>
               )
             }
@@ -95,9 +99,7 @@ export function ExhibitionDetail() {
               />
             )
           })}
-          {!hasContent && (
-            <p className="section-view__note">Espacio de esta exposición. El contenido se carga desde el CMS.</p>
-          )}
+          {!hasContent && <p className="section-view__note">{ui.exhibitionEmpty}</p>}
         </div>
       )}
     </section>

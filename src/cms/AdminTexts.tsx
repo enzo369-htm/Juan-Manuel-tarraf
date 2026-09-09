@@ -8,6 +8,7 @@ import {
   apiUploadMedia,
   type TextEntry,
 } from './api'
+import { BilingualField } from './BilingualField'
 
 function formatDate(value: string) {
   return value.slice(0, 10)
@@ -17,8 +18,11 @@ export function AdminTexts() {
   const [texts, setTexts] = useState<TextEntry[]>([])
   const [editing, setEditing] = useState<TextEntry | 'new' | null>(null)
   const [title, setTitle] = useState('')
+  const [titleEn, setTitleEn] = useState('')
   const [description, setDescription] = useState('')
+  const [descriptionEn, setDescriptionEn] = useState('')
   const [body, setBody] = useState('')
+  const [bodyEn, setBodyEn] = useState('')
   const [coverUrl, setCoverUrl] = useState('')
   const [coverMediaId, setCoverMediaId] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -38,8 +42,11 @@ export function AdminTexts() {
   const openNew = () => {
     setEditing('new')
     setTitle('')
+    setTitleEn('')
     setDescription('')
+    setDescriptionEn('')
     setBody('')
+    setBodyEn('')
     setCoverUrl('')
     setCoverMediaId('')
     setStatus('Nuevo texto')
@@ -48,8 +55,11 @@ export function AdminTexts() {
   const openEdit = (entry: TextEntry) => {
     setEditing(entry)
     setTitle(entry.title)
+    setTitleEn(entry.titleEn ?? '')
     setDescription(entry.description)
+    setDescriptionEn(entry.descriptionEn ?? '')
     setBody(entry.body ?? '')
+    setBodyEn(entry.bodyEn ?? '')
     setCoverUrl(entry.coverUrl ?? '')
     setCoverMediaId(entry.coverMediaId ?? '')
     setStatus('Editando')
@@ -57,8 +67,11 @@ export function AdminTexts() {
       .then((data) => {
         setEditing(data.text)
         setTitle(data.text.title)
+        setTitleEn(data.text.titleEn ?? '')
         setDescription(data.text.description)
+        setDescriptionEn(data.text.descriptionEn ?? '')
         setBody(data.text.body ?? '')
+        setBodyEn(data.text.bodyEn ?? '')
         setCoverUrl(data.text.coverUrl ?? '')
         setCoverMediaId(data.text.coverMediaId ?? '')
       })
@@ -78,6 +91,9 @@ export function AdminTexts() {
         title: title.trim(),
         description,
         body,
+        titleEn,
+        descriptionEn,
+        bodyEn,
         ...(coverMediaId ? { coverMediaId } : {}),
       }
       if (editing === 'new') {
@@ -162,24 +178,28 @@ export function AdminTexts() {
             void onSave()
           }}
         >
-          <label className="admin-login__label">
-            Título
-            <input
-              className="admin-login__input"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
-            />
-          </label>
-          <label className="admin-login__label">
-            Descripción
-            <textarea
-              className="admin-copy admin-copy--short"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Una o dos líneas que se ven en el listado."
-            />
-          </label>
+          <BilingualField
+            label="Título"
+            es={title}
+            en={titleEn}
+            onEs={setTitle}
+            onEn={setTitleEn}
+            required
+            maxLength={200}
+            inputClass="admin-login__input"
+          />
+          <BilingualField
+            label="Descripción"
+            es={description}
+            en={descriptionEn}
+            onEs={setDescription}
+            onEn={setDescriptionEn}
+            multiline
+            rows={3}
+            inputClass="admin-copy admin-copy--short"
+            placeholderEs="Una o dos líneas que se ven en el listado."
+            placeholderEn="One or two lines shown in the list."
+          />
           <div className="admin-expo-cover">
             <div className="admin-expo-cover__frame">
               {coverUrl ? <img src={coverUrl} alt="" /> : <span>Sin portada</span>}
@@ -199,15 +219,18 @@ export function AdminTexts() {
               />
             </label>
           </div>
-          <label className="admin-login__label">
-            Cuerpo
-            <textarea
-              className="admin-copy"
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              placeholder="El texto completo que se lee al entrar."
-            />
-          </label>
+          <BilingualField
+            label="Cuerpo"
+            es={body}
+            en={bodyEn}
+            onEs={setBody}
+            onEn={setBodyEn}
+            multiline
+            rows={12}
+            inputClass="admin-copy"
+            placeholderEs="El texto completo que se lee al entrar."
+            placeholderEn="The full text shown on the article page."
+          />
         </form>
       ) : (
         <ul className="admin-text-list">

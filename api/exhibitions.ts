@@ -1,3 +1,5 @@
+import { ensureI18nColumns } from '../server/i18n-schema'
+
 const COOKIE = 'jt_admin'
 
 function cookies(header: string) {
@@ -54,6 +56,8 @@ type ExhibitionRow = {
   id: string
   title: string
   description: string
+  title_en?: string | null
+  description_en?: string | null
   sort_order: number
   created_at: string
   cover_media_id: string | null
@@ -65,6 +69,8 @@ function toExhibition(row: ExhibitionRow) {
     id: row.id,
     title: row.title,
     description: row.description,
+    titleEn: row.title_en ?? '',
+    descriptionEn: row.description_en ?? '',
     sortOrder: row.sort_order,
     createdAt: row.created_at,
     coverMediaId: row.cover_media_id || undefined,
@@ -77,7 +83,7 @@ async function loadOne(
   id: string,
 ) {
   const rows = (await sql`
-    select e.id, e.title, e.description, e.sort_order, e.created_at,
+    select e.id, e.title, e.description, e.title_en, e.description_en, e.sort_order, e.created_at,
            e.cover_media_id, m.url as cover_url
     from exhibitions e
     left join media m on m.id = e.cover_media_id
@@ -97,6 +103,7 @@ export default {
       }
       const { neon } = await import('@neondatabase/serverless')
       const sql = neon(dbUrl)
+      await ensureI18nColumns(sql)
 
       if (request.method === 'GET' && id) {
         if (!isUuid(id)) {
@@ -122,7 +129,7 @@ export default {
       if (request.method === 'GET') {
         try {
           const rows = (await sql`
-            select e.id, e.title, e.description, e.sort_order, e.created_at,
+            select e.id, e.title, e.description, e.title_en, e.description_en, e.sort_order, e.created_at,
                    e.cover_media_id, m.url as cover_url
             from exhibitions e
             left join media m on m.id = e.cover_media_id
@@ -147,6 +154,8 @@ export default {
         const body = (await request.json().catch(() => ({}))) as {
           title?: string
           description?: string
+          titleEn?: string
+          descriptionEn?: string
           coverMediaId?: string
         }
         const title = (body.title ?? '').trim()
@@ -160,13 +169,15 @@ export default {
         try {
           const count = (await sql`select count(*)::int as n from exhibitions`) as { n: number }[]
           const created = (await sql`
-            insert into exhibitions (title, description, cover_media_id, sort_order)
-            values (${title}, ${body.description ?? ''}, ${cover}, ${count[0]?.n ?? 0})
-            returning id, title, description, sort_order, created_at, cover_media_id
+            insert into exhibitions (title, description, title_en, description_en, cover_media_id, sort_order)
+            values (${title}, ${body.description ?? ''}, ${body.titleEn ?? ''}, ${body.descriptionEn ?? ''}, ${cover}, ${count[0]?.n ?? 0})
+            returning id, title, description, title_en, description_en, sort_order, created_at, cover_media_id
           `) as {
             id: string
             title: string
             description: string
+            title_en: string
+            description_en: string
             sort_order: number
             created_at: string
             cover_media_id: string | null
@@ -208,6 +219,8 @@ export default {
           const body = (await request.json().catch(() => ({}))) as {
             title?: string
             description?: string
+            titleEn?: string
+            descriptionEn?: string
             coverMediaId?: string
           }
           const title = (body.title ?? '').trim()
@@ -223,6 +236,8 @@ export default {
                 update exhibitions
                 set title = ${title},
                     description = ${body.description ?? ''},
+                    title_en = ${body.titleEn ?? ''},
+                    description_en = ${body.descriptionEn ?? ''},
                     cover_media_id = ${cover}
                 where id = ${id}
                 returning id
@@ -230,7 +245,9 @@ export default {
             : ((await sql`
                 update exhibitions
                 set title = ${title},
-                    description = ${body.description ?? ''}
+                    description = ${body.description ?? ''},
+                    title_en = ${body.titleEn ?? ''},
+                    description_en = ${body.descriptionEn ?? ''}
                 where id = ${id}
                 returning id
               `) as { id: string }[])

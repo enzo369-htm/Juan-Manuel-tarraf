@@ -1,3 +1,5 @@
+import { ensureI18nColumns } from '../server/i18n-schema'
+
 const COOKIE = 'jt_admin'
 
 function cookies(header: string) {
@@ -49,6 +51,9 @@ type TextRow = {
   title: string
   description: string
   body?: string
+  title_en?: string | null
+  description_en?: string | null
+  body_en?: string | null
   created_at: string
   cover_media_id?: string | null
   cover_url?: string | null
@@ -60,6 +65,9 @@ function toText(row: TextRow) {
     title: row.title,
     description: row.description,
     body: row.body,
+    titleEn: row.title_en ?? '',
+    descriptionEn: row.description_en ?? '',
+    bodyEn: row.body_en ?? '',
     created_at: row.created_at,
     coverMediaId: row.cover_media_id || undefined,
     coverUrl: row.cover_url || undefined,
@@ -76,11 +84,12 @@ export default {
       }
       const { neon } = await import('@neondatabase/serverless')
       const sql = neon(dbUrl)
+      await ensureI18nColumns(sql)
 
       if (request.method === 'GET') {
         try {
           const rows = (await sql`
-            select t.id, t.title, t.description, t.created_at,
+            select t.id, t.title, t.description, t.title_en, t.description_en, t.created_at,
                    t.cover_media_id, m.url as cover_url
             from texts t
             left join media m on m.id = t.cover_media_id
@@ -106,6 +115,9 @@ export default {
           title?: string
           description?: string
           body?: string
+          titleEn?: string
+          descriptionEn?: string
+          bodyEn?: string
           coverMediaId?: string
         }
         const title = (body.title ?? '').trim()
@@ -118,9 +130,9 @@ export default {
             : null
         try {
           const created = (await sql`
-            insert into texts (title, description, body, cover_media_id)
-            values (${title}, ${body.description ?? ''}, ${body.body ?? ''}, ${cover})
-            returning id, title, description, body, created_at, cover_media_id
+            insert into texts (title, description, body, title_en, description_en, body_en, cover_media_id)
+            values (${title}, ${body.description ?? ''}, ${body.body ?? ''}, ${body.titleEn ?? ''}, ${body.descriptionEn ?? ''}, ${body.bodyEn ?? ''}, ${cover})
+            returning id, title, description, body, title_en, description_en, body_en, created_at, cover_media_id
           `) as TextRow[]
           let coverUrl: string | undefined
           if (created[0]?.cover_media_id) {

@@ -60,6 +60,7 @@ export async function apiResetHero(): Promise<HeroLayout> {
 export type SectionCopy = {
   slug: string
   body: string
+  bodyEn?: string
   portraitUrl?: string
   instagramHandle?: string
   instagramUrl?: string
@@ -75,6 +76,7 @@ export async function apiSaveCopy(
   slug: string,
   payload: {
     body?: string
+    bodyEn?: string
     portraitUrl?: string
     instagramHandle?: string
     instagramUrl?: string
@@ -93,6 +95,9 @@ export type TextEntry = {
   title: string
   description: string
   body?: string
+  titleEn?: string
+  descriptionEn?: string
+  bodyEn?: string
   created_at: string
   coverMediaId?: string
   coverUrl?: string
@@ -110,6 +115,9 @@ export async function apiCreateText(payload: {
   title: string
   description: string
   body: string
+  titleEn?: string
+  descriptionEn?: string
+  bodyEn?: string
   coverMediaId?: string
 }) {
   return request<{ text: TextEntry }>('/api/texts', {
@@ -120,7 +128,15 @@ export async function apiCreateText(payload: {
 
 export async function apiSaveText(
   id: string,
-  payload: { title: string; description: string; body: string; coverMediaId?: string },
+  payload: {
+    title: string
+    description: string
+    body: string
+    titleEn?: string
+    descriptionEn?: string
+    bodyEn?: string
+    coverMediaId?: string
+  },
 ) {
   return request<{ text: TextEntry }>(`/api/texts/${id}`, {
     method: 'PUT',
@@ -141,6 +157,7 @@ export type CanvasPiece = {
   z?: number
   mediaId?: string
   ficha?: string
+  fichaEn?: string
 }
 
 export type SectionCanvas = {
@@ -148,6 +165,8 @@ export type SectionCanvas = {
   kind?: 'text' | 'canvas'
   title?: string
   description?: string
+  titleEn?: string
+  descriptionEn?: string
   heightRatio: number
   pieces: CanvasPiece[]
 }
@@ -156,6 +175,8 @@ export type Exhibition = {
   id: string
   title: string
   description: string
+  titleEn?: string
+  descriptionEn?: string
   sortOrder: number
   createdAt: string
   coverMediaId?: string
@@ -173,6 +194,8 @@ export async function apiGetExhibition(id: string) {
 export async function apiCreateExhibition(payload: {
   title: string
   description?: string
+  titleEn?: string
+  descriptionEn?: string
   coverMediaId?: string
 }) {
   return request<{ exhibition: Exhibition }>('/api/exhibitions', {
@@ -183,7 +206,13 @@ export async function apiCreateExhibition(payload: {
 
 export async function apiSaveExhibition(
   id: string,
-  payload: { title: string; description?: string; coverMediaId?: string },
+  payload: {
+    title: string
+    description?: string
+    titleEn?: string
+    descriptionEn?: string
+    coverMediaId?: string
+  },
 ) {
   return request<{ exhibition: Exhibition }>(`/api/exhibitions?id=${id}`, {
     method: 'PUT',

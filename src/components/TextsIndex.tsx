@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiListTexts, type TextEntry } from '../cms/api'
+import { pick } from '../i18n/lang'
+import { useLanguage } from '../i18n/LanguageContext'
 import { SiteNav } from './SiteNav'
 
 function formatDate(value: string) {
@@ -8,8 +10,9 @@ function formatDate(value: string) {
 }
 
 export function TextsIndex() {
+  const { lang, ui } = useLanguage()
   const [texts, setTexts] = useState<TextEntry[]>([])
-  const [error, setError] = useState('')
+  const [failed, setFailed] = useState(false)
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
@@ -21,7 +24,7 @@ export function TextsIndex() {
         setTexts(data.texts)
       })
       .catch(() => {
-        if (!cancelled) setError('No se pudieron cargar los textos.')
+        if (!cancelled) setFailed(true)
       })
       .finally(() => {
         if (!cancelled) setReady(true)
@@ -32,33 +35,37 @@ export function TextsIndex() {
   }, [])
 
   return (
-    <section className="section-view" aria-label="Textos">
+    <section className="section-view" aria-label={ui.texts}>
       <SiteNav />
 
       <div className="texts-index">
         <header className="texts-index__head">
-          <h1 className="texts-index__kicker">Textos</h1>
+          <h1 className="texts-index__kicker">{ui.texts}</h1>
         </header>
-        {error && <p className="section-view__note">{error}</p>}
-        {ready && !error && texts.length === 0 && (
-          <p className="section-view__note">Todavía no hay textos publicados.</p>
+        {failed && <p className="section-view__note">{ui.textsLoadError}</p>}
+        {ready && !failed && texts.length === 0 && (
+          <p className="section-view__note">{ui.emptyTexts}</p>
         )}
         <ul className="texts-index__list">
-          {texts.map((entry) => (
-            <li key={entry.id} className="texts-index__item">
-              <Link className="texts-index__card" to={`/textos/${entry.id}`}>
-                <span className="texts-index__cover">
-                  {entry.coverUrl ? <img src={entry.coverUrl} alt="" /> : <span aria-hidden />}
-                </span>
-                <span className="texts-index__copy">
-                  <h2>{entry.title}</h2>
-                  <time dateTime={entry.created_at}>{formatDate(entry.created_at)}</time>
-                  {entry.description ? <p className="texts-index__excerpt">{entry.description}</p> : null}
-                </span>
-                <span className="texts-index__more">Leer →</span>
-              </Link>
-            </li>
-          ))}
+          {texts.map((entry) => {
+            const title = pick(entry.title, entry.titleEn, lang)
+            const excerpt = pick(entry.description, entry.descriptionEn, lang)
+            return (
+              <li key={entry.id} className="texts-index__item">
+                <Link className="texts-index__card" to={`/textos/${entry.id}`}>
+                  <span className="texts-index__cover">
+                    {entry.coverUrl ? <img src={entry.coverUrl} alt="" /> : <span aria-hidden />}
+                  </span>
+                  <span className="texts-index__copy">
+                    <h2>{title}</h2>
+                    <time dateTime={entry.created_at}>{formatDate(entry.created_at)}</time>
+                    {excerpt ? <p className="texts-index__excerpt">{excerpt}</p> : null}
+                  </span>
+                  <span className="texts-index__more">{ui.read}</span>
+                </Link>
+              </li>
+            )
+          })}
         </ul>
       </div>
     </section>

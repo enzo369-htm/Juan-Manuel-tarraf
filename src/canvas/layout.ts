@@ -20,6 +20,7 @@ export function withDefaultPositions(items: CanvasItemInput[]): CanvasItem[] {
         width: item.width as number,
         label: item.label,
         ficha: item.ficha,
+        fichaEn: item.fichaEn,
         meta: item.meta,
       }
     }
@@ -38,6 +39,7 @@ export function withDefaultPositions(items: CanvasItemInput[]): CanvasItem[] {
       width,
       label: item.label,
       ficha: item.ficha,
+      fichaEn: item.fichaEn,
       meta: item.meta,
     }
   })

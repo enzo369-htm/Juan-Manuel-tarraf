@@ -1,4 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { pick } from '../i18n/lang'
+import { useLanguage } from '../i18n/LanguageContext'
 import { withDefaultPositions } from './layout'
 import type { CanvasItem, CanvasItemInput } from './types'
 
@@ -38,7 +40,8 @@ export function CanvasViewer({ items, heightRatio, renderCaption, zoomOnClick = 
 }
 
 function Lightbox({ item, onClose }: { item: CanvasItem; onClose: () => void }) {
-  const ficha = item.ficha?.trim() ?? ''
+  const { lang } = useLanguage()
+  const ficha = pick(item.ficha, item.fichaEn, lang).trim()
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

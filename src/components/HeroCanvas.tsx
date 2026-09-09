@@ -5,16 +5,19 @@ import { DEFAULT_LABEL_INK, labelInkColor } from '../cms/defaults'
 import { HERO_BG_FALLBACK } from '../data/sections'
 import { WORLD, type SectionId } from '../data/works'
 import { useCameraController } from '../hooks/useCameraController'
+import { LangSwitch } from '../i18n/LangSwitch'
+import { useLanguage } from '../i18n/LanguageContext'
 import { WorkPiece } from './WorkPiece'
 
 export function HeroCanvas() {
   const navigate = useNavigate()
   const { layout, works, ready } = useHeroLayout()
+  const { ui } = useLanguage()
   const backgroundUrl = layout.backgroundUrl || HERO_BG_FALLBACK
   const viewportRef = useRef<HTMLElement>(null)
   const worldRef = useRef<HTMLDivElement>(null)
   const [hintVisible, setHintVisible] = useState(true)
-  const [hintText, setHintText] = useState('Mové el cursor para explorar')
+  const [coarsePointer, setCoarsePointer] = useState(false)
 
   useCameraController(viewportRef, {
     worldWidth: WORLD.width,
@@ -29,11 +32,7 @@ export function HeroCanvas() {
     if (!el) return
 
     const coarse = window.matchMedia('(pointer: coarse)')
-    const syncHint = () => {
-      setHintText(
-        coarse.matches ? 'Arrastrá para explorar' : 'Mové el cursor para explorar',
-      )
-    }
+    const syncHint = () => setCoarsePointer(coarse.matches)
     syncHint()
     coarse.addEventListener('change', syncHint)
 
@@ -55,7 +54,7 @@ export function HeroCanvas() {
     <section
       ref={viewportRef}
       className="hero"
-      aria-label="Espacio de entrada"
+      aria-label={ui.heroAria}
       style={{
         ['--hero-label' as string]: labelInkColor(layout.labelInk ?? DEFAULT_LABEL_INK),
       }}
@@ -84,7 +83,10 @@ export function HeroCanvas() {
       </div>
 
       <div className="hero__overlay">
-        <p className={`hero__hint${hintVisible ? '' : ' is-hidden'}`}>{hintText}</p>
+        <LangSwitch className="hero__lang" />
+        <p className={`hero__hint${hintVisible ? '' : ' is-hidden'}`}>
+          {coarsePointer ? ui.exploreTouch : ui.exploreMouse}
+        </p>
       </div>
     </section>
   )
