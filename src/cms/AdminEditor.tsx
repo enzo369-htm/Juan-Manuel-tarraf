@@ -77,7 +77,7 @@ export function AdminEditor() {
   const persist = useCallback(
     async (
       nextWorks: Work[],
-      extra?: { backgroundMediaId?: string; backgroundUrl?: string },
+      extra?: { backgroundMediaId?: string; backgroundUrl?: string; labelInk?: number },
     ) => {
       const positions = Object.fromEntries(
         nextWorks.map((w) => [w.id, { x: w.x, y: w.y, width: w.width, mediaId: w.mediaId }]),
