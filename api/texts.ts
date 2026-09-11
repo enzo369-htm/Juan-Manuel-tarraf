@@ -1,5 +1,3 @@
-import { ensureI18nColumns } from '../server/i18n-schema'
-
 const COOKIE = 'jt_admin'
 
 function cookies(header: string) {
@@ -38,10 +36,16 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
 }
 
-function isMissingTextCover(error: unknown) {
+function isUndefinedColumn(error: unknown) {
   if (!error || typeof error !== 'object') return false
   const code = 'code' in error ? String((error as { code?: string }).code) : ''
   if (code === '42703') return true
+  const message = error instanceof Error ? error.message : String(error)
+  return /undefined_column|column .+ does not exist/i.test(message)
+}
+
+function isMissingTextCover(error: unknown) {
+  if (!error || typeof error !== 'object') return false
   const message = error instanceof Error ? error.message : String(error)
   return /cover_media_id/i.test(message) && /does not exist|undefined_column/i.test(message)
 }
@@ -84,7 +88,6 @@ export default {
       }
       const { neon } = await import('@neondatabase/serverless')
       const sql = neon(dbUrl)
-      await ensureI18nColumns(sql)
 
       if (request.method === 'GET') {
         try {
@@ -97,13 +100,25 @@ export default {
           `) as TextRow[]
           return Response.json({ texts: rows.map(toText) })
         } catch (error) {
-          if (!isMissingTextCover(error)) throw error
-          const rows = (await sql`
-            select id, title, description, created_at
-            from texts
-            order by created_at desc
-          `) as TextRow[]
-          return Response.json({ texts: rows.map(toText) })
+          if (!isUndefinedColumn(error) && !isMissingTextCover(error)) throw error
+          try {
+            const rows = (await sql`
+              select t.id, t.title, t.description, t.created_at,
+                     t.cover_media_id, m.url as cover_url
+              from texts t
+              left join media m on m.id = t.cover_media_id
+              order by t.created_at desc
+            `) as TextRow[]
+            return Response.json({ texts: rows.map(toText) })
+          } catch (retryError) {
+            if (!isUndefinedColumn(retryError) && !isMissingTextCover(retryError)) throw retryError
+            const rows = (await sql`
+              select id, title, description, created_at
+              from texts
+              order by created_at desc
+            `) as TextRow[]
+            return Response.json({ texts: rows.map(toText) })
+          }
         }
       }
 
@@ -129,11 +144,27 @@ export default {
             ? body.coverMediaId
             : null
         try {
-          const created = (await sql`
-            insert into texts (title, description, body, title_en, description_en, body_en, cover_media_id)
-            values (${title}, ${body.description ?? ''}, ${body.body ?? ''}, ${body.titleEn ?? ''}, ${body.descriptionEn ?? ''}, ${body.bodyEn ?? ''}, ${cover})
-            returning id, title, description, body, title_en, description_en, body_en, created_at, cover_media_id
-          `) as TextRow[]
+          let created: TextRow[]
+          try {
+            created = (await sql`
+              insert into texts (title, description, body, title_en, description_en, body_en, cover_media_id)
+              values (${title}, ${body.description ?? ''}, ${body.body ?? ''}, ${body.titleEn ?? ''}, ${body.descriptionEn ?? ''}, ${body.bodyEn ?? ''}, ${cover})
+              returning id, title, description, body, title_en, description_en, body_en, created_at, cover_media_id
+            `) as TextRow[]
+          } catch (error) {
+            if (isMissingTextCover(error)) {
+              return Response.json(
+                { error: 'Falta correr db/016_text_cover.sql en Neon' },
+                { status: 503 },
+              )
+            }
+            if (!isUndefinedColumn(error)) throw error
+            created = (await sql`
+              insert into texts (title, description, body, cover_media_id)
+              values (${title}, ${body.description ?? ''}, ${body.body ?? ''}, ${cover})
+              returning id, title, description, body, created_at, cover_media_id
+            `) as TextRow[]
+          }
           let coverUrl: string | undefined
           if (created[0]?.cover_media_id) {
             const media = (await sql`

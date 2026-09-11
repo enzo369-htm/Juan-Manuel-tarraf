@@ -1,5 +1,3 @@
-import { ensureI18nColumns } from '../../server/i18n-schema'
-
 const COOKIE = 'jt_admin'
 const CANVAS_SLUGS = new Set(['trabajos', 'exposiciones', 'archivos'])
 const MAX_PER_KIND = 4
@@ -86,6 +84,14 @@ function clip(value: string, max: number) {
   return value.slice(0, max)
 }
 
+function isUndefinedColumn(error: unknown) {
+  if (!error || typeof error !== 'object') return false
+  const code = 'code' in error ? String((error as { code?: string }).code) : ''
+  if (code === '42703') return true
+  const message = error instanceof Error ? error.message : String(error)
+  return /undefined_column|column .+ does not exist/i.test(message)
+}
+
 async function readPlacementRows(
   sql: (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown>,
   slug: string,
@@ -98,14 +104,26 @@ async function readPlacementRows(
       where p.section_slug = ${slug}
       order by p.z_index, p.created_at
     `) as PlaceRow[]
-  } catch {
-    return (await sql`
-      select p.id, p.canvas_id, p.media_id, p.x, p.y, p.width, p.z_index, m.url
-      from placements p
-      join media m on m.id = p.media_id
-      where p.section_slug = ${slug}
-      order by p.z_index, p.created_at
-    `) as PlaceRow[]
+  } catch (error) {
+    if (!isUndefinedColumn(error)) throw error
+    try {
+      return (await sql`
+        select p.id, p.canvas_id, p.media_id, p.x, p.y, p.width, p.z_index, p.ficha, m.url
+        from placements p
+        join media m on m.id = p.media_id
+        where p.section_slug = ${slug}
+        order by p.z_index, p.created_at
+      `) as PlaceRow[]
+    } catch (retryError) {
+      if (!isUndefinedColumn(retryError)) throw retryError
+      return (await sql`
+        select p.id, p.canvas_id, p.media_id, p.x, p.y, p.width, p.z_index, m.url
+        from placements p
+        join media m on m.id = p.media_id
+        where p.section_slug = ${slug}
+        order by p.z_index, p.created_at
+      `) as PlaceRow[]
+    }
   }
 }
 
@@ -147,38 +165,82 @@ async function readCanvases(
   slug: string,
   exhibitionId = '',
 ) {
-  let canvasRows: CanvasRow[] = []
-  try {
-    canvasRows = exhibitionId
-      ? ((await sql`
-          select id, sort_order, height_ratio, kind, title, description, title_en, description_en
-          from section_canvases
-          where section_slug = ${slug} and exhibition_id = ${exhibitionId}
-          order by sort_order
-        `) as CanvasRow[])
-      : slug === 'exposiciones'
+  const load = async (withEn: boolean, spanishOnly: boolean) => {
+    const rows = exhibitionId
+      ? withEn
         ? ((await sql`
             select id, sort_order, height_ratio, kind, title, description, title_en, description_en
             from section_canvases
-            where section_slug = ${slug} and exhibition_id is null
+            where section_slug = ${slug} and exhibition_id = ${exhibitionId}
             order by sort_order
           `) as CanvasRow[])
-        : ((await sql`
-            select id, sort_order, height_ratio, kind, title, description, title_en, description_en
-            from section_canvases
-            where section_slug = ${slug}
-            order by sort_order
-          `) as CanvasRow[])
-  } catch {
+        : spanishOnly
+          ? ((await sql`
+              select id, sort_order, height_ratio, kind, title, description
+              from section_canvases
+              where section_slug = ${slug} and exhibition_id = ${exhibitionId}
+              order by sort_order
+            `) as CanvasRow[])
+          : ((await sql`
+              select id, sort_order, height_ratio
+              from section_canvases
+              where section_slug = ${slug} and exhibition_id = ${exhibitionId}
+              order by sort_order
+            `) as CanvasRow[])
+      : slug === 'exposiciones'
+        ? withEn
+          ? ((await sql`
+              select id, sort_order, height_ratio, kind, title, description, title_en, description_en
+              from section_canvases
+              where section_slug = ${slug} and exhibition_id is null
+              order by sort_order
+            `) as CanvasRow[])
+          : spanishOnly
+            ? ((await sql`
+                select id, sort_order, height_ratio, kind, title, description
+                from section_canvases
+                where section_slug = ${slug} and exhibition_id is null
+                order by sort_order
+              `) as CanvasRow[])
+            : ((await sql`
+                select id, sort_order, height_ratio
+                from section_canvases
+                where section_slug = ${slug} and exhibition_id is null
+                order by sort_order
+              `) as CanvasRow[])
+        : withEn
+          ? ((await sql`
+              select id, sort_order, height_ratio, kind, title, description, title_en, description_en
+              from section_canvases
+              where section_slug = ${slug}
+              order by sort_order
+            `) as CanvasRow[])
+          : spanishOnly
+            ? ((await sql`
+                select id, sort_order, height_ratio, kind, title, description
+                from section_canvases
+                where section_slug = ${slug}
+                order by sort_order
+              `) as CanvasRow[])
+            : ((await sql`
+                select id, sort_order, height_ratio
+                from section_canvases
+                where section_slug = ${slug}
+                order by sort_order
+              `) as CanvasRow[])
+    return rows
+  }
+
+  let canvasRows: CanvasRow[]
+  try {
+    canvasRows = await load(true, false)
+  } catch (error) {
+    if (!isUndefinedColumn(error)) throw error
     try {
-      canvasRows = (await sql`
-        select id, sort_order, height_ratio
-        from section_canvases
-        where section_slug = ${slug}
-        order by sort_order
-      `) as CanvasRow[]
-    } catch {
-      canvasRows = []
+      canvasRows = await load(false, true)
+    } catch (retryError) {
+      if (!isUndefinedColumn(retryError)) throw retryError
+      canvasRows = await load(false, false)
     }
   }
 
@@ -214,7 +276,6 @@ export default {
 
       const { neon } = await import('@neondatabase/serverless')
       const sql = neon(dbUrl)
-      await ensureI18nColumns(sql)
 
       if (request.method === 'GET') {
         const exhibitionId = exhibitionIdOf(request)
@@ -285,6 +346,8 @@ export default {
               kind: row.kind === 'text' ? 'text' : 'canvas',
               title: row.title ?? '',
               description: row.description ?? '',
+              titleEn: '',
+              descriptionEn: '',
               heightRatio: row.height_ratio,
               pieces: [],
             },
@@ -413,7 +476,10 @@ export default {
           } catch {
             await sql`
               update section_canvases
-              set height_ratio = ${ratio}, sort_order = ${i}
+              set height_ratio = ${ratio},
+                  sort_order = ${i},
+                  title = ${title},
+                  description = ${description}
               where id = ${canvasId} and section_slug = ${slug}
             `
           }
@@ -453,7 +519,8 @@ export default {
                   set x = ${x},
                       y = ${y},
                       width = ${width},
-                      canvas_id = ${canvasId}
+                      canvas_id = ${canvasId},
+                      ficha = ${ficha}
                   where id = ${piece.id} and section_slug = ${slug}
                 `
               }

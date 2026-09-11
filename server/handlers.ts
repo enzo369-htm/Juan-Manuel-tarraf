@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { sql } from './db'
 import { hasDatabase, hasR2 } from './env'
-import { ensureI18nColumns } from './i18n-schema'
 import {
   type ApiRequest,
   type ApiResponse,
@@ -74,14 +73,26 @@ async function readPlacementRows(db: ReturnType<typeof sql>, slug: string) {
       where p.section_slug = ${slug}
       order by p.z_index, p.created_at
     `) as PlaceRow[]
-  } catch {
-    return (await db`
-      select p.id, p.canvas_id, p.media_id, p.x, p.y, p.width, p.z_index, m.url
-      from placements p
-      join media m on m.id = p.media_id
-      where p.section_slug = ${slug}
-      order by p.z_index, p.created_at
-    `) as PlaceRow[]
+  } catch (error) {
+    if (!isUndefinedColumn(error)) throw error
+    try {
+      return (await db`
+        select p.id, p.canvas_id, p.media_id, p.x, p.y, p.width, p.z_index, p.ficha, m.url
+        from placements p
+        join media m on m.id = p.media_id
+        where p.section_slug = ${slug}
+        order by p.z_index, p.created_at
+      `) as PlaceRow[]
+    } catch (retryError) {
+      if (!isUndefinedColumn(retryError)) throw retryError
+      return (await db`
+        select p.id, p.canvas_id, p.media_id, p.x, p.y, p.width, p.z_index, m.url
+        from placements p
+        join media m on m.id = p.media_id
+        where p.section_slug = ${slug}
+        order by p.z_index, p.created_at
+      `) as PlaceRow[]
+    }
   }
 }
 
@@ -125,10 +136,16 @@ function isMissingLabelInk(error: unknown) {
   return /label_ink/i.test(message) && /does not exist|undefined_column/i.test(message)
 }
 
-function isMissingTextCover(error: unknown) {
+function isUndefinedColumn(error: unknown) {
   if (!error || typeof error !== 'object') return false
   const code = 'code' in error ? String((error as { code?: string }).code) : ''
   if (code === '42703') return true
+  const message = error instanceof Error ? error.message : String(error)
+  return /undefined_column|column .+ does not exist/i.test(message)
+}
+
+function isMissingTextCover(error: unknown) {
+  if (!error || typeof error !== 'object') return false
   const message = error instanceof Error ? error.message : String(error)
   return /cover_media_id/i.test(message) && /does not exist|undefined_column/i.test(message)
 }
@@ -237,13 +254,6 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
   const path = pathOf(req)
 
   try {
-    if (hasDatabase() && path.startsWith('/api/')) {
-      try {
-        await ensureI18nColumns(sql())
-      } catch {
-        /* schema still incomplete */
-      }
-    }
     if (path === '/api/auth/login' && method === 'POST') {
       const body = await readJson<{ password?: string }>(req)
       const expected = process.env.ADMIN_PASSWORD || (process.env.NODE_ENV === 'production' ? '' : 'tarraf')
@@ -416,10 +426,8 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         sendJson(res, 200, toCopy(copyMatch[1], rows[0]))
       } catch {
         try {
-          await ensureContactColumns(sql())
-          await ensurePortraitScale(sql())
           const rows = (await sql()`
-            select section_slug as slug, body, body_en, portrait_url, instagram_handle, instagram_url, email, portrait_scale
+            select section_slug as slug, body, portrait_url, instagram_handle, instagram_url, email, portrait_scale
             from section_copy
             where section_slug = ${copyMatch[1]}
           `) as {
@@ -508,22 +516,37 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         slug === 'bio' && typeof body.portraitUrl === 'string' ? body.portraitUrl : null
       if (portraitUrl !== null) {
         const portraitScale = clampPortraitScale(body.portraitScale)
-        const saveBio = async () => {
+        const saveBio = async (withEn: boolean) => {
+          if (withEn) {
+            await db`
+              insert into section_copy (section_slug, body, body_en, portrait_url, portrait_scale)
+              values (${slug}, ${text}, ${textEn}, ${portraitUrl}, ${portraitScale})
+              on conflict (section_slug) do update
+              set body = excluded.body,
+                  body_en = excluded.body_en,
+                  portrait_url = excluded.portrait_url,
+                  portrait_scale = excluded.portrait_scale
+            `
+            return
+          }
           await db`
-            insert into section_copy (section_slug, body, body_en, portrait_url, portrait_scale)
-            values (${slug}, ${text}, ${textEn}, ${portraitUrl}, ${portraitScale})
+            insert into section_copy (section_slug, body, portrait_url, portrait_scale)
+            values (${slug}, ${text}, ${portraitUrl}, ${portraitScale})
             on conflict (section_slug) do update
             set body = excluded.body,
-                body_en = excluded.body_en,
                 portrait_url = excluded.portrait_url,
                 portrait_scale = excluded.portrait_scale
           `
         }
         try {
-          await saveBio()
+          await saveBio(true)
         } catch {
-          await ensurePortraitScale(db)
-          await saveBio()
+          try {
+            await saveBio(false)
+          } catch {
+            await ensurePortraitScale(db)
+            await saveBio(false)
+          }
         }
         sendJson(res, 200, toCopy(slug, {
           slug,
@@ -534,11 +557,19 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         }))
         return
       }
-      await db`
-        insert into section_copy (section_slug, body, body_en)
-        values (${slug}, ${text}, ${textEn})
-        on conflict (section_slug) do update set body = excluded.body, body_en = excluded.body_en
-      `
+      try {
+        await db`
+          insert into section_copy (section_slug, body, body_en)
+          values (${slug}, ${text}, ${textEn})
+          on conflict (section_slug) do update set body = excluded.body, body_en = excluded.body_en
+        `
+      } catch {
+        await db`
+          insert into section_copy (section_slug, body)
+          values (${slug}, ${text})
+          on conflict (section_slug) do update set body = excluded.body
+        `
+      }
       sendJson(res, 200, toCopy(slug, { slug, body: text, body_en: textEn }))
       return
     }
@@ -580,15 +611,45 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
                 where section_slug = ${placeMatch[1]}
                 order by sort_order
               `) as typeof canvasRows)
-      } catch {
+      } catch (error) {
+        if (!isUndefinedColumn(error)) throw error
         try {
-          canvasRows = (await db`
-            select id, height_ratio from section_canvases
-            where section_slug = ${placeMatch[1]}
-            order by sort_order
-          `) as typeof canvasRows
-        } catch {
-          canvasRows = []
+          canvasRows = exhibitionId
+            ? ((await db`
+                select id, height_ratio, kind, title, description from section_canvases
+                where section_slug = ${placeMatch[1]} and exhibition_id = ${exhibitionId}
+                order by sort_order
+              `) as typeof canvasRows)
+            : placeMatch[1] === 'exposiciones'
+              ? ((await db`
+                  select id, height_ratio, kind, title, description from section_canvases
+                  where section_slug = ${placeMatch[1]} and exhibition_id is null
+                  order by sort_order
+                `) as typeof canvasRows)
+              : ((await db`
+                  select id, height_ratio, kind, title, description from section_canvases
+                  where section_slug = ${placeMatch[1]}
+                  order by sort_order
+                `) as typeof canvasRows)
+        } catch (retryError) {
+          if (!isUndefinedColumn(retryError)) throw retryError
+          canvasRows = exhibitionId
+            ? ((await db`
+                select id, height_ratio from section_canvases
+                where section_slug = ${placeMatch[1]} and exhibition_id = ${exhibitionId}
+                order by sort_order
+              `) as typeof canvasRows)
+            : placeMatch[1] === 'exposiciones'
+              ? ((await db`
+                  select id, height_ratio from section_canvases
+                  where section_slug = ${placeMatch[1]} and exhibition_id is null
+                  order by sort_order
+                `) as typeof canvasRows)
+              : ((await db`
+                  select id, height_ratio from section_canvases
+                  where section_slug = ${placeMatch[1]}
+                  order by sort_order
+                `) as typeof canvasRows)
         }
       }
       const rows = await readPlacementRows(db, placeMatch[1])
@@ -670,28 +731,24 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
               insert into section_canvases
                 (section_slug, exhibition_id, sort_order, height_ratio, kind, title, description)
               values (${placeMatch[1]}, ${exhibitionId}, ${existing.length}, 1.2, ${kind}, '', '')
-              returning id, height_ratio, kind, title, description, title_en, description_en
+              returning id, height_ratio, kind, title, description
             `) as {
               id: string
               height_ratio: number
               kind: string
               title: string
               description: string
-              title_en?: string | null
-              description_en?: string | null
             }[])
           : ((await db`
               insert into section_canvases (section_slug, sort_order, height_ratio, kind, title, description)
               values (${placeMatch[1]}, ${existing.length}, 1.2, ${kind}, '', '')
-              returning id, height_ratio, kind, title, description, title_en, description_en
+              returning id, height_ratio, kind, title, description
             `) as {
               id: string
               height_ratio: number
               kind: string
               title: string
               description: string
-              title_en?: string | null
-              description_en?: string | null
             }[])
         const row = created[0]
         sendJson(res, 200, {
@@ -700,8 +757,8 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
             kind: row.kind === 'text' ? 'text' : 'canvas',
             title: row.title ?? '',
             description: row.description ?? '',
-            titleEn: row.title_en ?? '',
-            descriptionEn: row.description_en ?? '',
+            titleEn: '',
+            descriptionEn: '',
             heightRatio: row.height_ratio,
             pieces: [],
           },
@@ -797,7 +854,8 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         } catch {
           try {
             await db`
-              update section_canvases set height_ratio = ${ratio}
+              update section_canvases
+              set height_ratio = ${ratio}, title = ${title}, description = ${description}
               where id = ${canvas.id} and section_slug = ${placeMatch[1]}
             `
           } catch {
@@ -823,7 +881,8 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
               update placements
               set x = ${piece.x},
                   y = ${piece.y},
-                  width = ${piece.width}
+                  width = ${piece.width},
+                  ficha = ${ficha}
               where id = ${piece.id} and section_slug = ${placeMatch[1]}
             `
           }
@@ -899,13 +958,25 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
           return
         }
         try {
-          const rows = (await sql()`
-            select e.id, e.title, e.description, e.title_en, e.description_en, e.sort_order, e.created_at,
-                   e.cover_media_id, m.url as cover_url
-            from exhibitions e
-            left join media m on m.id = e.cover_media_id
-            where e.id = ${id}
-          `) as Parameters<typeof toExhibition>[0][]
+          let rows: Parameters<typeof toExhibition>[0][]
+          try {
+            rows = (await sql()`
+              select e.id, e.title, e.description, e.title_en, e.description_en, e.sort_order, e.created_at,
+                     e.cover_media_id, m.url as cover_url
+              from exhibitions e
+              left join media m on m.id = e.cover_media_id
+              where e.id = ${id}
+            `) as Parameters<typeof toExhibition>[0][]
+          } catch (error) {
+            if (!isUndefinedColumn(error)) throw error
+            rows = (await sql()`
+              select e.id, e.title, e.description, e.sort_order, e.created_at,
+                     e.cover_media_id, m.url as cover_url
+              from exhibitions e
+              left join media m on m.id = e.cover_media_id
+              where e.id = ${id}
+            `) as Parameters<typeof toExhibition>[0][]
+          }
           if (!rows[0]) {
             sendJson(res, 404, { error: 'No encontrado' })
             return
@@ -921,16 +992,28 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         return
       }
       try {
-        const rows = (await sql()`
-          select e.id, e.title, e.description, e.title_en, e.description_en, e.sort_order, e.created_at,
-                 e.cover_media_id, m.url as cover_url
-          from exhibitions e
-          left join media m on m.id = e.cover_media_id
-          order by e.sort_order, e.created_at desc
-        `) as Parameters<typeof toExhibition>[0][]
+        let rows: Parameters<typeof toExhibition>[0][]
+        try {
+          rows = (await sql()`
+            select e.id, e.title, e.description, e.title_en, e.description_en, e.sort_order, e.created_at,
+                   e.cover_media_id, m.url as cover_url
+            from exhibitions e
+            left join media m on m.id = e.cover_media_id
+            order by e.sort_order, e.created_at desc
+          `) as Parameters<typeof toExhibition>[0][]
+        } catch (error) {
+          if (!isUndefinedColumn(error)) throw error
+          rows = (await sql()`
+            select e.id, e.title, e.description, e.sort_order, e.created_at,
+                   e.cover_media_id, m.url as cover_url
+            from exhibitions e
+            left join media m on m.id = e.cover_media_id
+            order by e.sort_order, e.created_at desc
+          `) as Parameters<typeof toExhibition>[0][]
+        }
         sendJson(res, 200, { exhibitions: rows.map(toExhibition) })
       } catch {
-        sendJson(res, 200, { exhibitions: [] })
+        sendJson(res, 503, { error: 'Falta correr db/011_exhibitions.sql en Neon' })
       }
       return
     }
@@ -957,22 +1040,32 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         typeof payload.coverMediaId === 'string' && isUuid(payload.coverMediaId)
           ? payload.coverMediaId
           : null
-      try {
-        const count = (await sql()`select count(*)::int as n from exhibitions`) as { n: number }[]
-        const created = (await sql()`
-          insert into exhibitions (title, description, title_en, description_en, cover_media_id, sort_order)
-          values (${title}, ${payload.description ?? ''}, ${payload.titleEn ?? ''}, ${payload.descriptionEn ?? ''}, ${cover}, ${count[0]?.n ?? 0})
-          returning id, title, description, title_en, description_en, sort_order, created_at, cover_media_id
-        `) as {
-          id: string
-          title: string
-          description: string
-          title_en?: string | null
-          description_en?: string | null
-          sort_order: number
-          created_at: string
-          cover_media_id: string | null
-        }[]
+        try {
+          const count = (await sql()`select count(*)::int as n from exhibitions`) as { n: number }[]
+          let created: {
+            id: string
+            title: string
+            description: string
+            title_en?: string | null
+            description_en?: string | null
+            sort_order: number
+            created_at: string
+            cover_media_id: string | null
+          }[]
+          try {
+            created = (await sql()`
+              insert into exhibitions (title, description, title_en, description_en, cover_media_id, sort_order)
+              values (${title}, ${payload.description ?? ''}, ${payload.titleEn ?? ''}, ${payload.descriptionEn ?? ''}, ${cover}, ${count[0]?.n ?? 0})
+              returning id, title, description, title_en, description_en, sort_order, created_at, cover_media_id
+            `) as typeof created
+          } catch (error) {
+            if (!isUndefinedColumn(error)) throw error
+            created = (await sql()`
+              insert into exhibitions (title, description, cover_media_id, sort_order)
+              values (${title}, ${payload.description ?? ''}, ${cover}, ${count[0]?.n ?? 0})
+              returning id, title, description, sort_order, created_at, cover_media_id
+            `) as typeof created
+          }
         const row = created[0]
         let coverUrl: string | null = null
         if (row.cover_media_id) {
@@ -1026,25 +1119,52 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
             ? payload.coverMediaId
             : undefined
         const updated = cover
-          ? ((await sql()`
-              update exhibitions
-              set title = ${title},
-                  description = ${payload.description ?? ''},
-                  title_en = ${payload.titleEn ?? ''},
-                  description_en = ${payload.descriptionEn ?? ''},
-                  cover_media_id = ${cover}
-              where id = ${id}
-              returning id
-            `) as { id: string }[])
-          : ((await sql()`
-              update exhibitions
-              set title = ${title},
-                  description = ${payload.description ?? ''},
-                  title_en = ${payload.titleEn ?? ''},
-                  description_en = ${payload.descriptionEn ?? ''}
-              where id = ${id}
-              returning id
-            `) as { id: string }[])
+          ? await (async () => {
+              try {
+                return (await sql()`
+                  update exhibitions
+                  set title = ${title},
+                      description = ${payload.description ?? ''},
+                      title_en = ${payload.titleEn ?? ''},
+                      description_en = ${payload.descriptionEn ?? ''},
+                      cover_media_id = ${cover}
+                  where id = ${id}
+                  returning id
+                `) as { id: string }[]
+              } catch (error) {
+                if (!isUndefinedColumn(error)) throw error
+                return (await sql()`
+                  update exhibitions
+                  set title = ${title},
+                      description = ${payload.description ?? ''},
+                      cover_media_id = ${cover}
+                  where id = ${id}
+                  returning id
+                `) as { id: string }[]
+              }
+            })()
+          : await (async () => {
+              try {
+                return (await sql()`
+                  update exhibitions
+                  set title = ${title},
+                      description = ${payload.description ?? ''},
+                      title_en = ${payload.titleEn ?? ''},
+                      description_en = ${payload.descriptionEn ?? ''}
+                  where id = ${id}
+                  returning id
+                `) as { id: string }[]
+              } catch (error) {
+                if (!isUndefinedColumn(error)) throw error
+                return (await sql()`
+                  update exhibitions
+                  set title = ${title},
+                      description = ${payload.description ?? ''}
+                  where id = ${id}
+                  returning id
+                `) as { id: string }[]
+              }
+            })()
         if (!updated[0]) {
           sendJson(res, 404, { error: 'No encontrado' })
           return
@@ -1078,11 +1198,22 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         `) as TextRow[]
         sendJson(res, 200, { texts: rows.map(toText) })
       } catch (error) {
-        if (!isMissingTextCover(error)) throw error
-        const rows = (await sql()`
-          select id, title, description, title_en, description_en, created_at from texts order by created_at desc
-        `) as TextRow[]
-        sendJson(res, 200, { texts: rows.map(toText) })
+        if (!isUndefinedColumn(error) && !isMissingTextCover(error)) throw error
+        try {
+          const rows = (await sql()`
+            select t.id, t.title, t.description, t.created_at,
+                   t.cover_media_id, m.url as cover_url
+            from texts t
+            left join media m on m.id = t.cover_media_id
+            order by t.created_at desc
+          `) as TextRow[]
+          sendJson(res, 200, { texts: rows.map(toText) })
+        } catch {
+          const rows = (await sql()`
+            select id, title, description, created_at from texts order by created_at desc
+          `) as TextRow[]
+          sendJson(res, 200, { texts: rows.map(toText) })
+        }
       }
       return
     }
@@ -1155,15 +1286,30 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         }
         sendJson(res, 200, { text: toText(rows[0]) })
       } catch (error) {
-        if (!isMissingTextCover(error)) throw error
-        const rows = (await sql()`
-          select id, title, description, body, title_en, description_en, body_en, created_at from texts where id = ${textMatch[1]}
-        `) as TextRow[]
-        if (!rows[0]) {
-          sendJson(res, 404, { error: 'No encontrado' })
-          return
+        if (!isUndefinedColumn(error) && !isMissingTextCover(error)) throw error
+        try {
+          const rows = (await sql()`
+            select t.id, t.title, t.description, t.body, t.created_at,
+                   t.cover_media_id, m.url as cover_url
+            from texts t
+            left join media m on m.id = t.cover_media_id
+            where t.id = ${textMatch[1]}
+          `) as TextRow[]
+          if (!rows[0]) {
+            sendJson(res, 404, { error: 'No encontrado' })
+            return
+          }
+          sendJson(res, 200, { text: toText(rows[0]) })
+        } catch {
+          const rows = (await sql()`
+            select id, title, description, body, created_at from texts where id = ${textMatch[1]}
+          `) as TextRow[]
+          if (!rows[0]) {
+            sendJson(res, 404, { error: 'No encontrado' })
+            return
+          }
+          sendJson(res, 200, { text: toText(rows[0]) })
         }
-        sendJson(res, 200, { text: toText(rows[0]) })
       }
       return
     }

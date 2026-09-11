@@ -1,5 +1,3 @@
-import { ensureI18nColumns } from '../../server/i18n-schema'
-
 const COOKIE = 'jt_admin'
 const COPY_SLUGS = new Set(['bio', 'textos', 'contacto'])
 
@@ -90,7 +88,6 @@ export default {
 
       const { neon } = await import('@neondatabase/serverless')
       const sql = neon(dbUrl)
-      await ensureI18nColumns(sql)
 
       const ensureContactColumns = async () => {
         await sql`alter table section_copy add column if not exists instagram_handle text not null default ''`
@@ -112,10 +109,8 @@ export default {
           return Response.json(toCopy(slug, rows[0]))
         } catch {
           try {
-            await ensureContactColumns()
-            await ensurePortraitScale()
             const rows = (await sql`
-              select section_slug as slug, body, body_en, portrait_url, instagram_handle, instagram_url, email, portrait_scale
+              select section_slug as slug, body, portrait_url, instagram_handle, instagram_url, email, portrait_scale
               from section_copy
               where section_slug = ${slug}
             `) as CopyRow[]
@@ -195,8 +190,9 @@ export default {
 
         if (portraitUrl !== null) {
           const portraitScale = clampPortraitScale(payload.portraitScale)
-          const saveBio = async () => {
-            await sql`
+          const saveBio = async (withEn: boolean) => {
+            if (withEn) {
+              await sql`
             insert into section_copy (section_slug, body, body_en, portrait_url, portrait_scale)
             values (${slug}, ${text}, ${textEn}, ${portraitUrl}, ${portraitScale})
             on conflict (section_slug) do update
@@ -205,18 +201,32 @@ export default {
                 portrait_url = excluded.portrait_url,
                 portrait_scale = excluded.portrait_scale
             `
+              return
+            }
+            await sql`
+            insert into section_copy (section_slug, body, portrait_url, portrait_scale)
+            values (${slug}, ${text}, ${portraitUrl}, ${portraitScale})
+            on conflict (section_slug) do update
+            set body = excluded.body,
+                portrait_url = excluded.portrait_url,
+                portrait_scale = excluded.portrait_scale
+            `
           }
           try {
-            await saveBio()
+            await saveBio(true)
           } catch {
             try {
-              await ensurePortraitScale()
-              await saveBio()
+              await saveBio(false)
             } catch {
-              return Response.json(
-                { error: 'Falta correr db/008_bio_portrait.sql en Neon' },
-                { status: 503 },
-              )
+              try {
+                await ensurePortraitScale()
+                await saveBio(false)
+              } catch {
+                return Response.json(
+                  { error: 'Falta correr db/008_bio_portrait.sql en Neon' },
+                  { status: 503 },
+                )
+              }
             }
           }
           return Response.json(
@@ -230,11 +240,19 @@ export default {
           )
         }
 
-        await sql`
-          insert into section_copy (section_slug, body, body_en)
-          values (${slug}, ${text}, ${textEn})
-          on conflict (section_slug) do update set body = excluded.body, body_en = excluded.body_en
-        `
+        try {
+          await sql`
+            insert into section_copy (section_slug, body, body_en)
+            values (${slug}, ${text}, ${textEn})
+            on conflict (section_slug) do update set body = excluded.body, body_en = excluded.body_en
+          `
+        } catch {
+          await sql`
+            insert into section_copy (section_slug, body)
+            values (${slug}, ${text})
+            on conflict (section_slug) do update set body = excluded.body
+          `
+        }
         try {
           const rows = (await sql`
             select section_slug as slug, body, portrait_url, instagram_handle, instagram_url, email

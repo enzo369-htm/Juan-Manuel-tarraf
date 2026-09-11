@@ -1,5 +1,3 @@
-import { ensureI18nColumns } from '../../server/i18n-schema'
-
 const COOKIE = 'jt_admin'
 
 function cookies(header: string) {
@@ -44,10 +42,16 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
 }
 
-function isMissingTextCover(error: unknown) {
+function isUndefinedColumn(error: unknown) {
   if (!error || typeof error !== 'object') return false
   const code = 'code' in error ? String((error as { code?: string }).code) : ''
   if (code === '42703') return true
+  const message = error instanceof Error ? error.message : String(error)
+  return /undefined_column|column .+ does not exist/i.test(message)
+}
+
+function isMissingTextCover(error: unknown) {
+  if (!error || typeof error !== 'object') return false
   const message = error instanceof Error ? error.message : String(error)
   return /cover_media_id/i.test(message) && /does not exist|undefined_column/i.test(message)
 }
@@ -94,7 +98,6 @@ export default {
       }
       const { neon } = await import('@neondatabase/serverless')
       const sql = neon(dbUrl)
-      await ensureI18nColumns(sql)
 
       if (request.method === 'GET') {
         try {
@@ -110,16 +113,31 @@ export default {
           }
           return Response.json({ text: toText(rows[0]) })
         } catch (error) {
-          if (!isMissingTextCover(error)) throw error
-          const rows = (await sql`
-            select id, title, description, body, created_at
-            from texts
-            where id = ${id}
-          `) as TextRow[]
-          if (!rows[0]) {
-            return Response.json({ error: 'No encontrado' }, { status: 404 })
+          if (!isUndefinedColumn(error) && !isMissingTextCover(error)) throw error
+          try {
+            const rows = (await sql`
+              select t.id, t.title, t.description, t.body, t.created_at,
+                     t.cover_media_id, m.url as cover_url
+              from texts t
+              left join media m on m.id = t.cover_media_id
+              where t.id = ${id}
+            `) as TextRow[]
+            if (!rows[0]) {
+              return Response.json({ error: 'No encontrado' }, { status: 404 })
+            }
+            return Response.json({ text: toText(rows[0]) })
+          } catch (retryError) {
+            if (!isUndefinedColumn(retryError) && !isMissingTextCover(retryError)) throw retryError
+            const rows = (await sql`
+              select id, title, description, body, created_at
+              from texts
+              where id = ${id}
+            `) as TextRow[]
+            if (!rows[0]) {
+              return Response.json({ error: 'No encontrado' }, { status: 404 })
+            }
+            return Response.json({ text: toText(rows[0]) })
           }
-          return Response.json({ text: toText(rows[0]) })
         }
       }
 
@@ -146,41 +164,82 @@ export default {
             ? body.coverMediaId
             : undefined
         try {
-          const updated = cover
-            ? ((await sql`
-                update texts
-                set title = ${title},
-                    description = ${body.description ?? ''},
-                    body = ${body.body ?? ''},
-                    title_en = ${body.titleEn ?? ''},
-                    description_en = ${body.descriptionEn ?? ''},
-                    body_en = ${body.bodyEn ?? ''},
-                    cover_media_id = ${cover}
-                where id = ${id}
-                returning id
-              `) as { id: string }[])
-            : ((await sql`
-                update texts
-                set title = ${title},
-                    description = ${body.description ?? ''},
-                    body = ${body.body ?? ''},
-                    title_en = ${body.titleEn ?? ''},
-                    description_en = ${body.descriptionEn ?? ''},
-                    body_en = ${body.bodyEn ?? ''}
-                where id = ${id}
-                returning id
-              `) as { id: string }[])
+          let updated: { id: string }[]
+          try {
+            updated = cover
+              ? ((await sql`
+                  update texts
+                  set title = ${title},
+                      description = ${body.description ?? ''},
+                      body = ${body.body ?? ''},
+                      title_en = ${body.titleEn ?? ''},
+                      description_en = ${body.descriptionEn ?? ''},
+                      body_en = ${body.bodyEn ?? ''},
+                      cover_media_id = ${cover}
+                  where id = ${id}
+                  returning id
+                `) as { id: string }[])
+              : ((await sql`
+                  update texts
+                  set title = ${title},
+                      description = ${body.description ?? ''},
+                      body = ${body.body ?? ''},
+                      title_en = ${body.titleEn ?? ''},
+                      description_en = ${body.descriptionEn ?? ''},
+                      body_en = ${body.bodyEn ?? ''}
+                  where id = ${id}
+                  returning id
+                `) as { id: string }[])
+          } catch (error) {
+            if (isMissingTextCover(error)) {
+              return Response.json(
+                { error: 'Falta correr db/016_text_cover.sql en Neon' },
+                { status: 503 },
+              )
+            }
+            if (!isUndefinedColumn(error)) throw error
+            updated = cover
+              ? ((await sql`
+                  update texts
+                  set title = ${title},
+                      description = ${body.description ?? ''},
+                      body = ${body.body ?? ''},
+                      cover_media_id = ${cover}
+                  where id = ${id}
+                  returning id
+                `) as { id: string }[])
+              : ((await sql`
+                  update texts
+                  set title = ${title},
+                      description = ${body.description ?? ''},
+                      body = ${body.body ?? ''}
+                  where id = ${id}
+                  returning id
+                `) as { id: string }[])
+          }
           if (!updated[0]) {
             return Response.json({ error: 'No encontrado' }, { status: 404 })
           }
-          const rows = (await sql`
-            select t.id, t.title, t.description, t.body, t.title_en, t.description_en, t.body_en, t.created_at,
-                   t.cover_media_id, m.url as cover_url
-            from texts t
-            left join media m on m.id = t.cover_media_id
-            where t.id = ${id}
-          `) as TextRow[]
-          return Response.json({ text: toText(rows[0]) })
+          try {
+            const rows = (await sql`
+              select t.id, t.title, t.description, t.body, t.title_en, t.description_en, t.body_en, t.created_at,
+                     t.cover_media_id, m.url as cover_url
+              from texts t
+              left join media m on m.id = t.cover_media_id
+              where t.id = ${id}
+            `) as TextRow[]
+            return Response.json({ text: toText(rows[0]) })
+          } catch (retryError) {
+            if (!isUndefinedColumn(retryError)) throw retryError
+            const rows = (await sql`
+              select t.id, t.title, t.description, t.body, t.created_at,
+                     t.cover_media_id, m.url as cover_url
+              from texts t
+              left join media m on m.id = t.cover_media_id
+              where t.id = ${id}
+            `) as TextRow[]
+            return Response.json({ text: toText(rows[0]) })
+          }
         } catch (error) {
           if (isMissingTextCover(error)) {
             return Response.json(

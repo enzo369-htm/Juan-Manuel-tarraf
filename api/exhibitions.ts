@@ -1,5 +1,3 @@
-import { ensureI18nColumns } from '../server/i18n-schema'
-
 const COOKIE = 'jt_admin'
 
 function cookies(header: string) {
@@ -44,6 +42,14 @@ function idOf(request: Request) {
   return fromPath || url.searchParams.get('id') || ''
 }
 
+function isUndefinedColumn(error: unknown) {
+  if (!error || typeof error !== 'object') return false
+  const code = 'code' in error ? String((error as { code?: string }).code) : ''
+  if (code === '42703') return true
+  const message = error instanceof Error ? error.message : String(error)
+  return /undefined_column|column .+ does not exist/i.test(message)
+}
+
 function isMissingTable(error: unknown) {
   if (!error || typeof error !== 'object') return false
   const code = 'code' in error ? String((error as { code?: string }).code) : ''
@@ -82,14 +88,26 @@ async function loadOne(
   sql: (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown>,
   id: string,
 ) {
-  const rows = (await sql`
-    select e.id, e.title, e.description, e.title_en, e.description_en, e.sort_order, e.created_at,
-           e.cover_media_id, m.url as cover_url
-    from exhibitions e
-    left join media m on m.id = e.cover_media_id
-    where e.id = ${id}
-  `) as ExhibitionRow[]
-  return rows[0] ? toExhibition(rows[0]) : null
+  try {
+    const rows = (await sql`
+      select e.id, e.title, e.description, e.title_en, e.description_en, e.sort_order, e.created_at,
+             e.cover_media_id, m.url as cover_url
+      from exhibitions e
+      left join media m on m.id = e.cover_media_id
+      where e.id = ${id}
+    `) as ExhibitionRow[]
+    return rows[0] ? toExhibition(rows[0]) : null
+  } catch (error) {
+    if (!isUndefinedColumn(error)) throw error
+    const rows = (await sql`
+      select e.id, e.title, e.description, e.sort_order, e.created_at,
+             e.cover_media_id, m.url as cover_url
+      from exhibitions e
+      left join media m on m.id = e.cover_media_id
+      where e.id = ${id}
+    `) as ExhibitionRow[]
+    return rows[0] ? toExhibition(rows[0]) : null
+  }
 }
 
 export default {
@@ -103,7 +121,6 @@ export default {
       }
       const { neon } = await import('@neondatabase/serverless')
       const sql = neon(dbUrl)
-      await ensureI18nColumns(sql)
 
       if (request.method === 'GET' && id) {
         if (!isUuid(id)) {
@@ -128,13 +145,25 @@ export default {
 
       if (request.method === 'GET') {
         try {
-          const rows = (await sql`
-            select e.id, e.title, e.description, e.title_en, e.description_en, e.sort_order, e.created_at,
-                   e.cover_media_id, m.url as cover_url
-            from exhibitions e
-            left join media m on m.id = e.cover_media_id
-            order by e.sort_order, e.created_at desc
-          `) as ExhibitionRow[]
+          let rows: ExhibitionRow[]
+          try {
+            rows = (await sql`
+              select e.id, e.title, e.description, e.title_en, e.description_en, e.sort_order, e.created_at,
+                     e.cover_media_id, m.url as cover_url
+              from exhibitions e
+              left join media m on m.id = e.cover_media_id
+              order by e.sort_order, e.created_at desc
+            `) as ExhibitionRow[]
+          } catch (error) {
+            if (!isUndefinedColumn(error)) throw error
+            rows = (await sql`
+              select e.id, e.title, e.description, e.sort_order, e.created_at,
+                     e.cover_media_id, m.url as cover_url
+              from exhibitions e
+              left join media m on m.id = e.cover_media_id
+              order by e.sort_order, e.created_at desc
+            `) as ExhibitionRow[]
+          }
           return Response.json(
             { exhibitions: rows.map(toExhibition) },
             { headers: { 'Cache-Control': 'no-store' } },
@@ -168,20 +197,30 @@ export default {
             : null
         try {
           const count = (await sql`select count(*)::int as n from exhibitions`) as { n: number }[]
-          const created = (await sql`
-            insert into exhibitions (title, description, title_en, description_en, cover_media_id, sort_order)
-            values (${title}, ${body.description ?? ''}, ${body.titleEn ?? ''}, ${body.descriptionEn ?? ''}, ${cover}, ${count[0]?.n ?? 0})
-            returning id, title, description, title_en, description_en, sort_order, created_at, cover_media_id
-          `) as {
+          let created: {
             id: string
             title: string
             description: string
-            title_en: string
-            description_en: string
+            title_en?: string
+            description_en?: string
             sort_order: number
             created_at: string
             cover_media_id: string | null
           }[]
+          try {
+            created = (await sql`
+              insert into exhibitions (title, description, title_en, description_en, cover_media_id, sort_order)
+              values (${title}, ${body.description ?? ''}, ${body.titleEn ?? ''}, ${body.descriptionEn ?? ''}, ${cover}, ${count[0]?.n ?? 0})
+              returning id, title, description, title_en, description_en, sort_order, created_at, cover_media_id
+            `) as typeof created
+          } catch (error) {
+            if (!isUndefinedColumn(error)) throw error
+            created = (await sql`
+              insert into exhibitions (title, description, cover_media_id, sort_order)
+              values (${title}, ${body.description ?? ''}, ${cover}, ${count[0]?.n ?? 0})
+              returning id, title, description, sort_order, created_at, cover_media_id
+            `) as typeof created
+          }
           const row = created[0]
           let coverUrl: string | null = null
           if (row.cover_media_id) {
@@ -232,25 +271,52 @@ export default {
               ? body.coverMediaId
               : undefined
           const updated = cover
-            ? ((await sql`
-                update exhibitions
-                set title = ${title},
-                    description = ${body.description ?? ''},
-                    title_en = ${body.titleEn ?? ''},
-                    description_en = ${body.descriptionEn ?? ''},
-                    cover_media_id = ${cover}
-                where id = ${id}
-                returning id
-              `) as { id: string }[])
-            : ((await sql`
-                update exhibitions
-                set title = ${title},
-                    description = ${body.description ?? ''},
-                    title_en = ${body.titleEn ?? ''},
-                    description_en = ${body.descriptionEn ?? ''}
-                where id = ${id}
-                returning id
-              `) as { id: string }[])
+            ? await (async () => {
+                try {
+                  return (await sql`
+                    update exhibitions
+                    set title = ${title},
+                        description = ${body.description ?? ''},
+                        title_en = ${body.titleEn ?? ''},
+                        description_en = ${body.descriptionEn ?? ''},
+                        cover_media_id = ${cover}
+                    where id = ${id}
+                    returning id
+                  `) as { id: string }[]
+                } catch (error) {
+                  if (!isUndefinedColumn(error)) throw error
+                  return (await sql`
+                    update exhibitions
+                    set title = ${title},
+                        description = ${body.description ?? ''},
+                        cover_media_id = ${cover}
+                    where id = ${id}
+                    returning id
+                  `) as { id: string }[]
+                }
+              })()
+            : await (async () => {
+                try {
+                  return (await sql`
+                    update exhibitions
+                    set title = ${title},
+                        description = ${body.description ?? ''},
+                        title_en = ${body.titleEn ?? ''},
+                        description_en = ${body.descriptionEn ?? ''}
+                    where id = ${id}
+                    returning id
+                  `) as { id: string }[]
+                } catch (error) {
+                  if (!isUndefinedColumn(error)) throw error
+                  return (await sql`
+                    update exhibitions
+                    set title = ${title},
+                        description = ${body.description ?? ''}
+                    where id = ${id}
+                    returning id
+                  `) as { id: string }[]
+                }
+              })()
           if (!updated[0]) {
             return Response.json({ error: 'No encontrado' }, { status: 404 })
           }
