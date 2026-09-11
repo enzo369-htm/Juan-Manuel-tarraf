@@ -36,6 +36,8 @@ export const UI = {
     heroAria: 'Espacio de entrada',
     exhibitions: 'Exposiciones',
     texts: 'Textos',
+    openMenu: 'Abrir menú',
+    closeMenu: 'Cerrar menú',
   },
   en: {
     view: 'View →',
@@ -55,5 +57,7 @@ export const UI = {
     heroAria: 'Entrance space',
     exhibitions: 'Exhibitions',
     texts: 'Texts',
+    openMenu: 'Open menu',
+    closeMenu: 'Close menu',
   },
 } as const
