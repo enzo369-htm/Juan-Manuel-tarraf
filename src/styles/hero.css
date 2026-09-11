@@ -6,6 +6,8 @@
   --accent: #161513;
   --font-display: 'Instrument Serif', Georgia, serif;
   --font-body: 'DM Sans', 'Segoe UI', sans-serif;
+  --page-x: 2.4rem;
+  --page-top: 1.25rem;
 }
 
 *,
@@ -25,6 +27,8 @@ body,
   color: var(--ink);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
 }
 
 h2 {
@@ -244,12 +248,12 @@ html.page-scroll #root {
 }
 
 .site-nav {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 1.25rem 2rem;
-  flex-wrap: wrap;
-  padding: 1.25rem 2.4rem;
+  gap: 0.85rem 1.5rem;
+  padding: var(--page-top) max(var(--page-x), env(safe-area-inset-right))
+    var(--page-top) max(var(--page-x), env(safe-area-inset-left));
 }
 
 .site-nav__brand {
@@ -266,12 +270,9 @@ html.page-scroll #root {
   color: var(--ink);
 }
 
-.site-nav__end {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.9rem 1.5rem;
+.site-nav nav {
+  justify-self: end;
+  min-width: 0;
 }
 
 .lang-switch {
@@ -286,7 +287,7 @@ html.page-scroll #root {
 
 .lang-switch button {
   margin: 0;
-  padding: 0;
+  padding: 0.2rem 0.15rem;
   border: 0;
   background: none;
   color: var(--mute);
@@ -305,8 +306,8 @@ html.page-scroll #root {
 
 .hero__lang {
   position: absolute;
-  top: 1.25rem;
-  right: 2.4rem;
+  top: max(var(--page-top), env(safe-area-inset-top));
+  right: max(var(--page-x), env(safe-area-inset-right));
   pointer-events: auto;
   color: var(--hero-label, var(--ink));
 }
@@ -362,13 +363,13 @@ html.page-scroll #root {
   align-items: stretch;
   justify-content: flex-start;
   gap: 0;
-  padding: 0 0 3rem;
+  padding: 0 0 max(3rem, env(safe-area-inset-bottom));
 }
 
 .section-view__copy {
   max-width: 40rem;
   margin: 0 auto;
-  padding: 2.4rem 1.5rem 0;
+  padding: 2.4rem max(1.5rem, env(safe-area-inset-right)) 0 max(1.5rem, env(safe-area-inset-left));
   white-space: pre-wrap;
   line-height: 1.65;
 }
@@ -444,12 +445,18 @@ html.page-scroll #root {
 @media (max-width: 800px) {
   .bio {
     grid-template-columns: 1fr;
-    gap: 2.2rem;
-    padding-top: 2rem;
+    gap: 1.6rem;
+    width: min(72rem, calc(100% - 2 * var(--page-x)));
+    padding: 1.6rem 0 max(3.2rem, env(safe-area-inset-bottom));
+  }
+
+  .bio__text {
+    font-size: 1.05rem;
   }
 
   .bio__portrait {
     width: min(100%, calc(var(--bio-portrait-scale) * 1%));
+    max-width: 22rem;
     justify-self: start;
   }
 }
@@ -542,7 +549,8 @@ a.contact__row:focus-visible {
 .expos-index {
   width: 100%;
   margin: 0;
-  padding: 1.6rem 2.4rem 5rem;
+  padding: 1.6rem max(var(--page-x), env(safe-area-inset-right)) 5rem
+    max(var(--page-x), env(safe-area-inset-left));
 }
 
 .expos-index__head {
@@ -628,26 +636,28 @@ a.contact__row:focus-visible {
 
 @media (max-width: 800px) {
   .expos-index {
-    padding: 0.8rem 2.4rem 3.4rem;
+    padding: 0.6rem max(var(--page-x), env(safe-area-inset-right)) 3.4rem
+      max(var(--page-x), env(safe-area-inset-left));
   }
 
   .expos-index__card {
     width: 100%;
     grid-template-columns: 1fr;
-    gap: 1.1rem;
+    gap: 0.9rem;
   }
 
   .expos-index__more {
-    justify-self: end;
+    justify-self: start;
   }
 
   .expos-index__item {
-    padding: 1.8rem 0;
+    padding: 1.6rem 0;
   }
 }
 
 .expos-detail {
-  padding: 0 2.4rem 3rem;
+  padding: 0 max(var(--page-x), env(safe-area-inset-right)) 3rem
+    max(var(--page-x), env(safe-area-inset-left));
 }
 
 .expos-detail__title {
@@ -676,7 +686,8 @@ a.contact__row:focus-visible {
 .texts-index {
   width: 100%;
   margin: 0;
-  padding: 1.6rem 2.4rem 5rem;
+  padding: 1.6rem max(var(--page-x), env(safe-area-inset-right)) 5rem
+    max(var(--page-x), env(safe-area-inset-left));
 }
 
 .texts-index__head {
@@ -769,20 +780,21 @@ a.contact__row:focus-visible {
 
 @media (max-width: 800px) {
   .texts-index {
-    padding: 0.8rem 2.4rem 3.4rem;
+    padding: 0.6rem max(var(--page-x), env(safe-area-inset-right)) 3.4rem
+      max(var(--page-x), env(safe-area-inset-left));
   }
 
   .texts-index__card {
     grid-template-columns: 1fr;
-    gap: 1.1rem;
+    gap: 0.9rem;
   }
 
   .texts-index__more {
-    justify-self: end;
+    justify-self: start;
   }
 
   .texts-index__item {
-    padding: 1.8rem 0;
+    padding: 1.6rem 0;
   }
 }
 
@@ -814,4 +826,101 @@ a.contact__row:focus-visible {
   text-align: left;
   white-space: pre-wrap;
   line-height: 1.7;
+}
+
+@media (max-width: 800px) {
+  :root {
+    --page-x: 1.15rem;
+    --page-top: 0.9rem;
+  }
+
+  .site-nav {
+    grid-template-columns: 1fr auto;
+    gap: 0.55rem 0.8rem;
+  }
+
+  .site-nav nav {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+  }
+
+  .site-nav__list {
+    justify-content: flex-start;
+    gap: 0.15rem 0.95rem;
+  }
+
+  .site-nav__brand {
+    font-size: 1.22rem;
+    padding-right: 0;
+  }
+
+  .site-nav__link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.4rem;
+    font-size: 1.02rem;
+  }
+
+  .series-intro {
+    --series-inset: var(--page-x);
+    width: calc(100% - (2 * var(--series-inset)));
+    padding: 2rem 0 1.2rem;
+  }
+
+  .expos-detail__title {
+    margin-top: 1.6rem;
+  }
+
+  .section-view--contact {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .section-view--contact .contact {
+    position: relative;
+    inset: auto;
+    min-height: 62dvh;
+    padding: 2rem max(var(--page-x), env(safe-area-inset-right))
+      max(3rem, env(safe-area-inset-bottom)) max(var(--page-x), env(safe-area-inset-left));
+  }
+
+  .contact__row {
+    min-height: 2.6rem;
+  }
+
+  .text-article {
+    width: min(38rem, calc(100% - 2 * var(--page-x)));
+    padding: 2.2rem 0 max(4rem, env(safe-area-inset-bottom));
+  }
+
+  .hero__overlay {
+    padding: max(1.2rem, env(safe-area-inset-bottom));
+  }
+
+  .hero__hint {
+    font-size: 0.7rem;
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --page-x: 1rem;
+  }
+
+  .site-nav__list {
+    gap: 0.05rem 0.75rem;
+  }
+}
+
+@media (pointer: coarse) {
+  .lang-switch button {
+    min-width: 2.4rem;
+    min-height: 2.4rem;
+  }
+
+  .work-piece__label {
+    opacity: 0.92;
+    font-size: 0.95rem;
+  }
 }
