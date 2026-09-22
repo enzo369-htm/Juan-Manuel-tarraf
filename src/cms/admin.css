@@ -549,7 +549,7 @@
   margin: 3rem auto 0;
   max-width: 22rem;
   text-align: center;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: 1.15rem;
   font-style: italic;
   color: var(--mute);
