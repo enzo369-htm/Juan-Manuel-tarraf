@@ -224,9 +224,59 @@ export async function apiDeleteExhibition(id: string) {
   return request<{ ok: boolean }>(`/api/exhibitions?id=${id}`, { method: 'DELETE' })
 }
 
-function placementsPath(slug: string, exhibitionId?: string, extra?: string) {
+export type WorkSeries = {
+  id: string
+  title: string
+  description: string
+  titleEn?: string
+  descriptionEn?: string
+  sortOrder: number
+  createdAt: string
+}
+
+export async function apiListSeries() {
+  return request<{ series: WorkSeries[] }>('/api/series')
+}
+
+export async function apiGetSeries(id: string) {
+  return request<{ series: WorkSeries }>(`/api/series?id=${id}`)
+}
+
+export async function apiCreateSeries(payload: {
+  title: string
+  description?: string
+  titleEn?: string
+  descriptionEn?: string
+}) {
+  return request<{ series: WorkSeries }>('/api/series', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function apiSaveSeries(
+  id: string,
+  payload: {
+    title: string
+    description?: string
+    titleEn?: string
+    descriptionEn?: string
+  },
+) {
+  return request<{ series: WorkSeries }>(`/api/series?id=${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function apiDeleteSeries(id: string) {
+  return request<{ ok: boolean }>(`/api/series?id=${id}`, { method: 'DELETE' })
+}
+
+function placementsPath(slug: string, exhibitionId?: string, extra?: string, seriesId?: string) {
   const params = new URLSearchParams()
   if (exhibitionId) params.set('exhibitionId', exhibitionId)
+  if (seriesId) params.set('seriesId', seriesId)
   if (extra) {
     const more = new URLSearchParams(extra)
     more.forEach((value, key) => params.set(key, value))
@@ -235,12 +285,12 @@ function placementsPath(slug: string, exhibitionId?: string, extra?: string) {
   return `/api/placements/${slug}${query ? `?${query}` : ''}`
 }
 
-export async function apiGetPlacements(slug: string, exhibitionId?: string) {
+export async function apiGetPlacements(slug: string, exhibitionId?: string, seriesId?: string) {
   const data = await request<{
     canvases?: SectionCanvas[]
     pieces?: CanvasPiece[]
     heightRatio?: number
-  }>(placementsPath(slug, exhibitionId))
+  }>(placementsPath(slug, exhibitionId, undefined, seriesId))
   return { canvases: data.canvases ?? [] }
 }
 
@@ -248,27 +298,37 @@ export async function apiSavePlacements(
   slug: string,
   canvases: SectionCanvas[],
   exhibitionId?: string,
+  seriesId?: string,
 ) {
-  return request<{ ok: boolean; canvases?: SectionCanvas[] }>(placementsPath(slug, exhibitionId), {
-    method: 'PUT',
-    body: JSON.stringify({ canvases, exhibitionId }),
-  })
+  return request<{ ok: boolean; canvases?: SectionCanvas[] }>(
+    placementsPath(slug, exhibitionId, undefined, seriesId),
+    {
+      method: 'PUT',
+      body: JSON.stringify({ canvases, exhibitionId, seriesId }),
+    },
+  )
 }
 
 export async function apiAddCanvas(
   slug: string,
   kind: 'text' | 'canvas' = 'canvas',
   exhibitionId?: string,
+  seriesId?: string,
 ) {
-  return request<{ canvas: SectionCanvas }>(placementsPath(slug, exhibitionId), {
+  return request<{ canvas: SectionCanvas }>(placementsPath(slug, exhibitionId, undefined, seriesId), {
     method: 'POST',
-    body: JSON.stringify({ kind, exhibitionId }),
+    body: JSON.stringify({ kind, exhibitionId, seriesId }),
   })
 }
 
-export async function apiDeleteCanvas(slug: string, canvasId: string, exhibitionId?: string) {
+export async function apiDeleteCanvas(
+  slug: string,
+  canvasId: string,
+  exhibitionId?: string,
+  seriesId?: string,
+) {
   return request<{ ok: boolean }>(
-    placementsPath(slug, exhibitionId, `canvasId=${canvasId}`),
+    placementsPath(slug, exhibitionId, `canvasId=${canvasId}`, seriesId),
     { method: 'DELETE' },
   )
 }

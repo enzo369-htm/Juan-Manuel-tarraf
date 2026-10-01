@@ -7,12 +7,19 @@ import { AdminGate } from './AdminGate'
 import { AdminSectionCanvas } from './AdminSectionCanvas'
 import { AdminShell } from './AdminShell'
 import { AdminTexts } from './AdminTexts'
+import { AdminWorks } from './AdminWorks'
 import './admin.css'
 
 function AdminExhibitionCanvas() {
   const { id } = useParams()
   if (!id) return <Navigate to="/admin/exposiciones" replace />
   return <AdminSectionCanvas slug="exposiciones" exhibitionId={id} />
+}
+
+function AdminSeriesCanvas() {
+  const { id } = useParams()
+  if (!id) return <Navigate to="/admin/trabajos" replace />
+  return <AdminSectionCanvas slug="trabajos" seriesId={id} />
 }
 
 export function AdminPage() {
@@ -25,7 +32,8 @@ export function AdminPage() {
           <Route path="bio" element={<AdminCopy slug="bio" />} />
           <Route path="textos" element={<AdminTexts />} />
           <Route path="contacto" element={<AdminContact />} />
-          <Route path="trabajos" element={<AdminSectionCanvas slug="trabajos" />} />
+          <Route path="trabajos/:id" element={<AdminSeriesCanvas />} />
+          <Route path="trabajos" element={<AdminWorks />} />
           <Route path="exposiciones/:id" element={<AdminExhibitionCanvas />} />
           <Route path="exposiciones" element={<AdminExhibitions />} />
           <Route path="archivos" element={<AdminSectionCanvas slug="archivos" />} />

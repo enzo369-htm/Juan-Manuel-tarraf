@@ -120,6 +120,26 @@ function toExhibition(row: {
   }
 }
 
+function toSeries(row: {
+  id: string
+  title: string
+  description: string
+  title_en?: string | null
+  description_en?: string | null
+  sort_order: number
+  created_at: string
+}) {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    titleEn: row.title_en ?? '',
+    descriptionEn: row.description_en ?? '',
+    sortOrder: row.sort_order,
+    createdAt: row.created_at,
+  }
+}
+
 function isMissingHeroBackgroundTable(error: unknown) {
   if (!error || typeof error !== 'object') return false
   const code = 'code' in error ? String((error as { code?: string }).code) : ''
@@ -584,6 +604,7 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
       const exhibitionId = isUuid(queryParam(req, 'exhibitionId'))
         ? queryParam(req, 'exhibitionId')
         : ''
+      const seriesId = isUuid(queryParam(req, 'seriesId')) ? queryParam(req, 'seriesId') : ''
       let canvasRows: {
         id: string
         height_ratio: number
@@ -594,7 +615,13 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         description_en?: string | null
       }[] = []
       try {
-        canvasRows = exhibitionId
+        canvasRows = seriesId
+          ? ((await db`
+              select id, height_ratio, kind, title, description, title_en, description_en from section_canvases
+              where section_slug = ${placeMatch[1]} and series_id = ${seriesId}
+              order by sort_order
+            `) as typeof canvasRows)
+          : exhibitionId
           ? ((await db`
               select id, height_ratio, kind, title, description, title_en, description_en from section_canvases
               where section_slug = ${placeMatch[1]} and exhibition_id = ${exhibitionId}
@@ -614,7 +641,13 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
       } catch (error) {
         if (!isUndefinedColumn(error)) throw error
         try {
-          canvasRows = exhibitionId
+          canvasRows = seriesId
+            ? ((await db`
+                select id, height_ratio, kind, title, description from section_canvases
+                where section_slug = ${placeMatch[1]} and series_id = ${seriesId}
+                order by sort_order
+              `) as typeof canvasRows)
+            : exhibitionId
             ? ((await db`
                 select id, height_ratio, kind, title, description from section_canvases
                 where section_slug = ${placeMatch[1]} and exhibition_id = ${exhibitionId}
@@ -633,7 +666,13 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
                 `) as typeof canvasRows)
         } catch (retryError) {
           if (!isUndefinedColumn(retryError)) throw retryError
-          canvasRows = exhibitionId
+          canvasRows = seriesId
+            ? ((await db`
+                select id, height_ratio from section_canvases
+                where section_slug = ${placeMatch[1]} and series_id = ${seriesId}
+                order by sort_order
+              `) as typeof canvasRows)
+            : exhibitionId
             ? ((await db`
                 select id, height_ratio from section_canvases
                 where section_slug = ${placeMatch[1]} and exhibition_id = ${exhibitionId}
@@ -696,16 +735,29 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         sendJson(res, 503, { error: 'DATABASE_URL no configurada' })
         return
       }
-      const payload = await readJson<{ kind?: string; exhibitionId?: string }>(req)
+      const payload = await readJson<{ kind?: string; exhibitionId?: string; seriesId?: string }>(req)
       const kind = payload.kind === 'text' ? 'text' : 'canvas'
       const exhibitionId =
         typeof payload.exhibitionId === 'string' && isUuid(payload.exhibitionId)
           ? payload.exhibitionId
-          : ''
+          : isUuid(queryParam(req, 'exhibitionId'))
+            ? queryParam(req, 'exhibitionId')
+            : ''
+      const seriesId =
+        typeof payload.seriesId === 'string' && isUuid(payload.seriesId)
+          ? payload.seriesId
+          : isUuid(queryParam(req, 'seriesId'))
+            ? queryParam(req, 'seriesId')
+            : ''
       const db = sql()
       let existing: { id: string; kind?: string | null }[] = []
       try {
-        existing = exhibitionId
+        existing = seriesId
+          ? ((await db`
+              select id, kind from section_canvases
+              where section_slug = ${placeMatch[1]} and series_id = ${seriesId}
+            `) as typeof existing)
+          : exhibitionId
           ? ((await db`
               select id, kind from section_canvases
               where section_slug = ${placeMatch[1]} and exhibition_id = ${exhibitionId}
@@ -726,7 +778,20 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         return
       }
       try {
-        const created = exhibitionId
+        const created = seriesId
+          ? ((await db`
+              insert into section_canvases
+                (section_slug, series_id, sort_order, height_ratio, kind, title, description)
+              values (${placeMatch[1]}, ${seriesId}, ${existing.length}, 1.2, ${kind}, '', '')
+              returning id, height_ratio, kind, title, description
+            `) as {
+              id: string
+              height_ratio: number
+              kind: string
+              title: string
+              description: string
+            }[])
+          : exhibitionId
           ? ((await db`
               insert into section_canvases
                 (section_slug, exhibition_id, sort_order, height_ratio, kind, title, description)
@@ -789,7 +854,14 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
       const exhibitionId = isUuid(queryParam(req, 'exhibitionId'))
         ? queryParam(req, 'exhibitionId')
         : ''
-      const leftover = exhibitionId
+      const seriesId = isUuid(queryParam(req, 'seriesId')) ? queryParam(req, 'seriesId') : ''
+      const leftover = seriesId
+        ? ((await db`
+            select id from section_canvases
+            where section_slug = ${placeMatch[1]} and series_id = ${seriesId}
+            order by sort_order
+          `) as { id: string }[])
+        : exhibitionId
         ? ((await db`
             select id from section_canvases
             where section_slug = ${placeMatch[1]} and exhibition_id = ${exhibitionId}
@@ -943,6 +1015,127 @@ export async function handleApi(req: ApiRequest, res: ApiResponse) {
         placementId,
         warning: hasR2() ? undefined : 'R2 no configurado: la URL no es pública hasta que subas a R2',
       })
+      return
+    }
+
+    if (path === '/api/series' && method === 'GET') {
+      const id = queryParam(req, 'id')
+      if (!hasDatabase()) {
+        sendJson(res, 200, id ? { error: 'DATABASE_URL no configurada' } : { series: [] })
+        return
+      }
+      try {
+        if (id) {
+          if (!isUuid(id)) {
+            sendJson(res, 400, { error: 'Serie inválida' })
+            return
+          }
+          const rows = (await sql()`
+            select id, title, description, title_en, description_en, sort_order, created_at
+            from work_series
+            where id = ${id}
+          `) as Parameters<typeof toSeries>[0][]
+          if (!rows[0]) {
+            sendJson(res, 404, { error: 'No encontrado' })
+            return
+          }
+          sendJson(res, 200, { series: toSeries(rows[0]) })
+          return
+        }
+        const rows = (await sql()`
+          select id, title, description, title_en, description_en, sort_order, created_at
+          from work_series
+          order by sort_order, created_at
+        `) as Parameters<typeof toSeries>[0][]
+        sendJson(res, 200, { series: rows.map(toSeries) })
+      } catch {
+        sendJson(res, 503, { error: 'Falta correr db/018_work_series.sql en Neon' })
+      }
+      return
+    }
+
+    if (path === '/api/series' && method === 'POST') {
+      if (!requireAuth(req, res)) return
+      if (!hasDatabase()) {
+        sendJson(res, 503, { error: 'DATABASE_URL no configurada' })
+        return
+      }
+      const payload = await readJson<{
+        title?: string
+        description?: string
+        titleEn?: string
+        descriptionEn?: string
+      }>(req)
+      const title = (payload.title ?? '').trim().slice(0, 200)
+      if (!title) {
+        sendJson(res, 400, { error: 'El título es obligatorio' })
+        return
+      }
+      try {
+        const count = (await sql()`select count(*)::int as n from work_series`) as { n: number }[]
+        const created = (await sql()`
+          insert into work_series (title, description, title_en, description_en, sort_order)
+          values (
+            ${title},
+            ${(payload.description ?? '').slice(0, 6000)},
+            ${(payload.titleEn ?? '').slice(0, 200)},
+            ${(payload.descriptionEn ?? '').slice(0, 6000)},
+            ${count[0]?.n ?? 0}
+          )
+          returning id, title, description, title_en, description_en, sort_order, created_at
+        `) as Parameters<typeof toSeries>[0][]
+        sendJson(res, 200, { series: toSeries(created[0]) })
+      } catch {
+        sendJson(res, 503, { error: 'Falta correr db/018_work_series.sql en Neon' })
+      }
+      return
+    }
+
+    if (path === '/api/series' && (method === 'PUT' || method === 'DELETE')) {
+      if (!requireAuth(req, res)) return
+      if (!hasDatabase()) {
+        sendJson(res, 503, { error: 'DATABASE_URL no configurada' })
+        return
+      }
+      const id = queryParam(req, 'id')
+      if (!isUuid(id)) {
+        sendJson(res, 400, { error: 'Serie inválida' })
+        return
+      }
+      try {
+        if (method === 'DELETE') {
+          await sql()`delete from work_series where id = ${id}`
+          sendJson(res, 200, { ok: true })
+          return
+        }
+        const payload = await readJson<{
+          title?: string
+          description?: string
+          titleEn?: string
+          descriptionEn?: string
+        }>(req)
+        const title = (payload.title ?? '').trim().slice(0, 200)
+        if (!title) {
+          sendJson(res, 400, { error: 'El título es obligatorio' })
+          return
+        }
+        const updated = (await sql()`
+          update work_series
+          set title = ${title},
+              description = ${(payload.description ?? '').slice(0, 6000)},
+              title_en = ${(payload.titleEn ?? '').slice(0, 200)},
+              description_en = ${(payload.descriptionEn ?? '').slice(0, 6000)}
+          where id = ${id}
+          returning id, title, description, title_en, description_en, sort_order, created_at
+        `) as Parameters<typeof toSeries>[0][]
+        if (!updated[0]) {
+          sendJson(res, 404, { error: 'No encontrado' })
+          return
+        }
+        sendJson(res, 200, { series: toSeries(updated[0]) })
+      } catch {
+        sendJson(res, 503, { error: 'Falta correr db/018_work_series.sql en Neon' })
+      }
       return
     }
 

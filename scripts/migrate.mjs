@@ -47,6 +47,7 @@ const files = [
   '015_hero_label_ink.sql',
   '016_text_cover.sql',
   '017_i18n.sql',
+  '018_work_series.sql',
 ]
 
 for (const file of files) {

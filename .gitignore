@@ -6,3 +6,5 @@ dist
 !.env.example
 *.local
 .tmp-video-frames
+.vercel
+.env*.local

@@ -1,6 +1,7 @@
 import { useNavigate, useParams } from 'react-router-dom'
 import { getSection } from '../data/sections'
 import { SectionView } from './SectionView'
+import { WorksIndex } from './WorksIndex'
 import { useEffect } from 'react'
 
 export function SectionPage() {
@@ -13,5 +14,6 @@ export function SectionPage() {
   }, [section, navigate])
 
   if (!section) return null
+  if (section.id === 'trabajos') return <WorksIndex />
   return <SectionView section={section} />
 }

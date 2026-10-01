@@ -6,10 +6,13 @@ import {
   apiAddCanvas,
   apiDeleteCanvas,
   apiDeleteExhibition,
+  apiDeleteSeries,
   apiGetExhibition,
   apiGetPlacements,
+  apiGetSeries,
   apiSaveExhibition,
   apiSavePlacements,
+  apiSaveSeries,
   apiUploadMedia,
   type CanvasPiece,
   type SectionCanvas,
@@ -25,9 +28,10 @@ function blockKind(block: SectionCanvas): 'text' | 'canvas' {
 type Props = {
   slug: string
   exhibitionId?: string
+  seriesId?: string
 }
 
-export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
+export function AdminSectionCanvas({ slug, exhibitionId, seriesId }: Props) {
   const section = getSection(slug)
   const navigate = useNavigate()
   const [heading, setHeading] = useState(section?.label ?? slug)
@@ -49,13 +53,27 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
   const canvasCount = canvases.filter((block) => blockKind(block) === 'canvas').length
 
   const refresh = useCallback(async () => {
-    const data = await apiGetPlacements(slug, exhibitionId)
+    const data = await apiGetPlacements(slug, exhibitionId, seriesId)
     setCanvases(data.canvases)
     setDirty(false)
     setSelected(null)
-  }, [slug, exhibitionId])
+  }, [slug, exhibitionId, seriesId])
 
   useEffect(() => {
+    if (seriesId) {
+      void apiGetSeries(seriesId)
+        .then((data) => {
+          setHeading(data.series.title)
+          setTitle(data.series.title)
+          setTitleEn(data.series.titleEn ?? '')
+          setDescription(data.series.description)
+          setDescriptionEn(data.series.descriptionEn ?? '')
+          setCoverUrl('')
+          setCoverMediaId('')
+        })
+        .catch(() => setHeading(section?.label ?? slug))
+      return
+    }
     if (!exhibitionId) {
       setHeading(section?.label ?? slug)
       setTitle('')
@@ -77,7 +95,7 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
         setCoverMediaId(data.exhibition.coverMediaId ?? '')
       })
       .catch(() => setHeading(section?.label ?? slug))
-  }, [exhibitionId, section?.label, slug])
+  }, [exhibitionId, seriesId, section?.label, slug])
 
   useEffect(() => {
     void refresh().catch((error) => {
@@ -97,14 +115,26 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
   }
 
   const onSave = async () => {
-    if (exhibitionId && !title.trim()) {
+    if ((exhibitionId || seriesId) && !title.trim()) {
       setStatus('El título es obligatorio')
       return
     }
     setSaving(true)
     setStatus('Guardando…')
     try {
-      if (exhibitionId) {
+      if (seriesId) {
+        const savedSeries = await apiSaveSeries(seriesId, {
+          title: title.trim(),
+          description,
+          titleEn,
+          descriptionEn,
+        })
+        setHeading(savedSeries.series.title)
+        setTitle(savedSeries.series.title)
+        setTitleEn(savedSeries.series.titleEn ?? '')
+        setDescription(savedSeries.series.description)
+        setDescriptionEn(savedSeries.series.descriptionEn ?? '')
+      } else if (exhibitionId) {
         const savedExpo = await apiSaveExhibition(exhibitionId, {
           title: title.trim(),
           description,
@@ -120,7 +150,7 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
         setCoverUrl(savedExpo.exhibition.coverUrl ?? coverUrl)
         setCoverMediaId(savedExpo.exhibition.coverMediaId ?? coverMediaId)
       }
-      const saved = await apiSavePlacements(slug, canvases, exhibitionId)
+      const saved = await apiSavePlacements(slug, canvases, exhibitionId, seriesId)
       if (saved.canvases) setCanvases(saved.canvases)
       setDirty(false)
       setStatus('Guardado')
@@ -160,12 +190,24 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
     }
   }
 
+  const onDeleteSeries = async () => {
+    if (!seriesId) return
+    if (!window.confirm('¿Quitar esta serie y todas sus fotos?')) return
+    setStatus('Quitando…')
+    try {
+      await apiDeleteSeries(seriesId)
+      navigate('/admin/trabajos')
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Error al quitar')
+    }
+  }
+
   const onAdd = async (kind: 'text' | 'canvas') => {
     const count = kind === 'text' ? textCount : canvasCount
     if (count >= MAX_PER_KIND) return
     setStatus(kind === 'text' ? 'Agregando texto…' : 'Agregando lienzo…')
     try {
-      const { canvas } = await apiAddCanvas(slug, kind, exhibitionId)
+      const { canvas } = await apiAddCanvas(slug, kind, exhibitionId, seriesId)
       setCanvases((prev) => [...prev, canvas])
       setStatus(kind === 'text' ? 'Texto agregado — guardá cuando lo edites' : 'Lienzo agregado — acordate de guardar las obras')
     } catch (error) {
@@ -177,7 +219,7 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
     if (!window.confirm('¿Quitar este bloque?')) return
     setStatus('Quitando…')
     try {
-      await apiDeleteCanvas(slug, canvasId, exhibitionId)
+      await apiDeleteCanvas(slug, canvasId, exhibitionId, seriesId)
       setCanvases((prev) => prev.filter((canvas) => canvas.id !== canvasId))
       if (selected?.canvasId === canvasId) setSelected(null)
       setStatus('Quitado')
@@ -235,15 +277,15 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
           <h1>{heading}</h1>
         </div>
         <div className="admin-bar__actions">
-          {exhibitionId ? (
+          {exhibitionId || seriesId ? (
             <>
-              <Link className="admin-bar__btn" to="/admin/exposiciones">
+              <Link className="admin-bar__btn" to={seriesId ? '/admin/trabajos' : '/admin/exposiciones'}>
                 Volver
               </Link>
               <button
                 type="button"
                 className="admin-bar__btn admin-bar__btn--danger"
-                onClick={() => void onDeleteExhibition()}
+                onClick={() => void (seriesId ? onDeleteSeries() : onDeleteExhibition())}
               >
                 Quitar
               </button>
@@ -350,6 +392,46 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
       ) : null}
 
       <div className="admin-canvas-scroll">
+        {seriesId ? (
+          <div className="admin-expo-meta">
+            <BilingualField
+              label="Título"
+              es={title}
+              en={titleEn}
+              onEs={(value) => {
+                setTitle(value)
+                setHeading(value || 'Serie')
+                markMetaDirty()
+              }}
+              onEn={(value) => {
+                setTitleEn(value)
+                markMetaDirty()
+              }}
+              maxLength={200}
+              required
+              inputClass="admin-series-text__title"
+            />
+            <BilingualField
+              label="Texto"
+              es={description}
+              en={descriptionEn}
+              onEs={(value) => {
+                setDescription(value)
+                markMetaDirty()
+              }}
+              onEn={(value) => {
+                setDescriptionEn(value)
+                markMetaDirty()
+              }}
+              multiline
+              rows={6}
+              maxLength={6000}
+              inputClass="admin-series-text__body"
+              placeholderEs="El texto que se ve debajo del título, al entrar a la serie."
+              placeholderEn="The text shown under the title when the series opens."
+            />
+          </div>
+        ) : null}
         {exhibitionId ? (
           <div className="admin-expo-meta">
             <p className="admin-bar__kicker">Vidriera</p>
@@ -419,9 +501,11 @@ export function AdminSectionCanvas({ slug, exhibitionId }: Props) {
         ) : null}
         {canvases.length === 0 && (
           <p className="admin-canvas-empty">
-            {exhibitionId
-              ? 'Agregá un texto o un lienzo para el contenido de la muestra.'
-              : 'Todavía no hay nada. Agregá un texto o un lienzo.'}
+            {seriesId
+              ? 'Agregá un lienzo para las pinturas de esta serie.'
+              : exhibitionId
+                ? 'Agregá un texto o un lienzo para el contenido de la muestra.'
+                : 'Todavía no hay nada. Agregá un texto o un lienzo.'}
           </p>
         )}
         {canvases.map((canvas, index) =>

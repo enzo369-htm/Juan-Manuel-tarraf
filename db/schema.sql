@@ -65,6 +65,23 @@ create unique index if not exists section_canvases_exhibition_sort
   on section_canvases (exhibition_id, sort_order)
   where exhibition_id is not null;
 
+create table if not exists work_series (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  description text not null default '',
+  title_en text not null default '',
+  description_en text not null default '',
+  sort_order int not null default 0,
+  created_at timestamptz not null default now()
+);
+
+alter table section_canvases
+  add column if not exists series_id uuid references work_series (id) on delete cascade;
+
+create unique index if not exists section_canvases_series_sort
+  on section_canvases (series_id, sort_order)
+  where series_id is not null;
+
 create table if not exists placements (
   id uuid primary key default gen_random_uuid(),
   section_slug text not null references sections (slug) on delete cascade,

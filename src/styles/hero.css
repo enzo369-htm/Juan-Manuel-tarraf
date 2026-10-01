@@ -617,10 +617,10 @@ a.contact__row:focus-visible {
 .expos-index__card h2 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 10pt;
+  font-size: 1.35rem;
   font-weight: 400;
-  letter-spacing: 0;
-  line-height: 1.65;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
 }
 
 .expos-index__excerpt {
@@ -661,6 +661,49 @@ a.contact__row:focus-visible {
   .expos-index__item {
     padding: 1.6rem 0;
   }
+}
+
+.works-index {
+  width: 100%;
+  margin: 0;
+  padding: 1.6rem max(var(--page-x), env(safe-area-inset-right)) 5rem
+    max(var(--page-x), env(safe-area-inset-left));
+}
+
+.works-index__head {
+  padding: 0.4rem 0 1.6rem;
+}
+
+.works-index__kicker {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.7rem, 3vw, 2.2rem);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+
+.works-index__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+
+.works-index__link {
+  display: block;
+  padding: 1.15rem 0;
+  border-bottom: 1px solid var(--line);
+  color: inherit;
+  text-decoration: none;
+  font-family: var(--font-display);
+  font-size: clamp(1.35rem, 2.4vw, 1.75rem);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+}
+
+.works-index__link:hover {
+  color: var(--mute);
 }
 
 .expos-detail {
@@ -754,10 +797,10 @@ a.contact__row:focus-visible {
 .texts-index__card h2 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 10pt;
+  font-size: 1.35rem;
   font-weight: 400;
-  letter-spacing: 0;
-  line-height: 1.65;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
 }
 
 .texts-index__card time {
