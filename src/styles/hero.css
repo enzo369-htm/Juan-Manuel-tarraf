@@ -664,32 +664,17 @@ a.contact__row:focus-visible {
 }
 
 .section-view:has(.works-index) {
+  position: relative;
   min-height: 100dvh;
 }
 
 .works-index {
-  flex: 1;
-  align-self: center;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   width: max-content;
   max-width: min(42rem, calc(100% - 2 * var(--page-x)));
-  padding: 2rem 0 3.5rem;
-}
-
-.works-index__head {
-  padding: 1.4rem 0 2.6rem;
-}
-
-.works-index__kicker {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 1.15rem;
-  font-weight: 400;
-  letter-spacing: 0;
-  line-height: 1.4;
-  color: var(--ink);
 }
 
 .works-index__list {

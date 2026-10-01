@@ -34,9 +34,6 @@ export function WorksIndex() {
     <section className="section-view" aria-label={ui.works}>
       <SiteNav />
       <div className="works-index">
-        <header className="works-index__head">
-          <h1 className="works-index__kicker">{ui.works}</h1>
-        </header>
         {failed && <p className="section-view__note">{ui.worksLoadError}</p>}
         {ready && !failed && series.length === 0 && (
           <p className="section-view__note">{ui.emptyWorks}</p>
