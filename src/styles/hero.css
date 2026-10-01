@@ -663,11 +663,19 @@ a.contact__row:focus-visible {
   }
 }
 
+.section-view:has(.works-index) {
+  min-height: 100dvh;
+}
+
 .works-index {
-  width: 100%;
-  margin: 0;
-  padding: 1.6rem max(var(--page-x), env(safe-area-inset-right)) 5rem
-    max(var(--page-x), env(safe-area-inset-left));
+  flex: 1;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: max-content;
+  max-width: min(42rem, calc(100% - 2 * var(--page-x)));
+  padding: 2rem 0 3.5rem;
 }
 
 .works-index__head {
@@ -712,6 +720,7 @@ a.contact__row:focus-visible {
 }
 
 .works-index__title {
+  min-width: 0;
   color: var(--ink);
 }
 
