@@ -42,18 +42,20 @@ export function WorksIndex() {
           <p className="section-view__note">{ui.emptyWorks}</p>
         )}
         {series.length > 0 && (
-          <ul className="works-index__list">
-            {series.map((entry) => {
+          <ol className="works-index__list">
+            {series.map((entry, index) => {
               const title = pick(entry.title, entry.titleEn, lang)
+              const number = String(index + 1).padStart(2, '0')
               return (
                 <li key={entry.id}>
                   <Link className="works-index__link" to={`/trabajos/${entry.id}`}>
-                    {title}
+                    <span className="works-index__num">{number}.</span>
+                    <span className="works-index__title">{title}</span>
                   </Link>
                 </li>
               )
             })}
-          </ul>
+          </ol>
         )}
       </div>
     </section>
